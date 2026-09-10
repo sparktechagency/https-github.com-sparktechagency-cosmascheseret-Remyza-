@@ -491,6 +491,8 @@ class SentDMWebhookProcessingTests(TestCase):
         self.assertEqual(outbound_message.content, "Hi there, thanks for reaching out. Reply STOP to opt out.")
         self.assertTrue(SentDMMessage.objects.filter(sent_message_id="msg_ai_reply", lead=lead).exists())
         self.assertEqual(event.status, "processed")
+        mocked_ai_service.return_value.generate_reply_and_stage.assert_called_once()
+        self.assertEqual(mocked_ai_service.return_value.generate_reply_and_stage.call_args.kwargs["organization"], self.organization)
         mocked_client.return_value.send_message.assert_called_once()
         self.assertEqual(mocked_client.return_value.send_message.call_args.kwargs["channel"], "sms")
 

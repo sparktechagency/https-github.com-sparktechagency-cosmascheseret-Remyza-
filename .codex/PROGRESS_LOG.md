@@ -421,3 +421,17 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test sentdm` (25 tests)
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py test accounts business crm communications subscription sentdm` (36 tests)
+
+## 2026-09-10 - AI Compliance Prompt Hardening
+
+- Reworked `AIService` to build a Sent.dm/10DLC-aware system prompt with organization context.
+- Prompt now includes business legal/name identity, support email, Sent.dm vertical, approved messaging use case, business reply tone, and optional organization AI instructions.
+- Added explicit AI rules for business identification, STOP opt-out language, no urgency/pressure wording, no ALL CAPS, no excessive punctuation, no link shorteners, and staying inside the approved use case/vertical.
+- Passed the organization into Sent.dm inbound AI reply generation so responses are grounded in the correct agent/business context.
+- Made the fallback AI response compliant by identifying the business and including STOP opt-out language.
+- Added AI prompt regression tests and tightened Sent.dm webhook tests to confirm organization context reaches the AI service.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q ai sentdm`
+  - `.venv\Scripts\python.exe manage.py test ai sentdm` (27 tests)
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (38 tests)

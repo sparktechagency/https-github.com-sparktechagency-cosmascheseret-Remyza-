@@ -717,7 +717,7 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
         return {"sent": False, "reason": "ai_disabled"}
 
     history = conversation.messages.order_by("created_at")
-    ai_response = AIService().generate_reply_and_stage(history)
+    ai_response = AIService().generate_reply_and_stage(history, organization=profile.organization)
     reply_text = (ai_response.get("reply") or "").strip()
     if not reply_text:
         return {"sent": False, "reason": "empty_ai_reply"}

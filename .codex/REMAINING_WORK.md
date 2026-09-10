@@ -104,17 +104,18 @@ STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT
 - [x] Store outbound AI reply in conversation history.
 - [x] Disable AI for HOT leads after reply so a human can take over.
 - [x] Add tests for AI reply service with mocked OpenAI and mocked Sent.dm client.
+
 ## 8. AI COMPLIANCE RULES
 
-- [ ] Update AI prompts to enforce Sent.dm/10DLC compliance.
-- [ ] First message must identify business name.
-- [ ] First message must include STOP opt-out language.
-- [ ] Avoid urgency/pressure wording.
-- [ ] Avoid ALL CAPS.
-- [ ] Avoid excessive punctuation.
-- [ ] Avoid link shorteners.
-- [ ] Stay inside approved use case/vertical.
-- [ ] Add tests or prompt snapshots for compliance-critical instructions.
+- [x] Update AI prompts to enforce Sent.dm/10DLC compliance.
+- [x] First message must identify business name.
+- [x] First message must include STOP opt-out language.
+- [x] Avoid urgency/pressure wording.
+- [x] Avoid ALL CAPS.
+- [x] Avoid excessive punctuation.
+- [x] Avoid link shorteners.
+- [x] Stay inside approved use case/vertical.
+- [x] Add tests or prompt snapshots for compliance-critical instructions.
 
 ## 9. OUTBOUND SEND RULES
 
