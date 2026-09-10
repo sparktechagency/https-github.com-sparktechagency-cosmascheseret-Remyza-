@@ -435,3 +435,47 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test ai sentdm` (27 tests)
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (38 tests)
+
+## 2026-09-10 - Sent.dm Outbound Channel Policy
+
+- Added shared Sent.dm outbound channel policy helpers for direct sends, AI replies, and future follow-up sends.
+- `auto`, `sms`, and `rcs` can be used without WhatsApp configuration, keeping WhatsApp optional for agents.
+- Explicit `whatsapp` sends now require an active `SentDMProfile.whatsapp_phone_number` from a connected/verified WhatsApp setup.
+- Follow-up sends requested over WhatsApp now route to SMS when the lead is outside Meta's 24-hour customer-service window, using `Lead.last_incoming_at` as the window source.
+- Sent.dm send wrappers now accept `purpose` and `lead` so scheduled follow-up code can reuse the same policy when outbound follow-up messaging is implemented.
+- Added tests for channel pass-through, WhatsApp required configuration, 24-hour WhatsApp window checks, and follow-up fallback to SMS.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q sentdm`
+  - `.venv\Scripts\python.exe manage.py test sentdm` (30 tests)
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (43 tests)
+
+## 2026-09-10 - Sent.dm MCP and Docs Verification Pass
+
+- Verified the connected Sent MCP account returns organization `Chesera LLC` with id `80c15901-8bd6-407f-b623-0958c0374a98`.
+- Verified MCP shows approved default OPT_IN, OPT_OUT, and HELP templates on the organization account.
+- Checked Sent official docs for message sending, channel selection, webhooks/signatures, Sender Profiles, and WhatsApp prerequisites.
+- Confirmed our REST client sends `to` as an array, free-form `text`, and explicit channels as arrays; added tests for this payload shape.
+- Confirmed our internal `auto` channel maps to Sent automatic routing by omitting `channel` from the outbound payload.
+- Added profile creation readiness warning: if direct WABA credentials are missing, Sent may require the profile to inherit an already configured organization-level WhatsApp Business Account, otherwise profile creation can be rejected.
+- Added a clearer Sender Profile creation error hint when Sent rejects a request without direct WABA credentials.
+- Remaining caveat: MCP did not expose profile creation, webhook creation/status, 10DLC submission, channel configuration status, or actual live REST send verification. Those still require controlled REST/dashboard validation.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q sentdm`
+  - `.venv\Scripts\python.exe manage.py test sentdm` (33 tests)
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (46 tests)
+
+## 2026-09-10 - Optional Agent-Owned WhatsApp Activation State
+
+- Added explicit Sent.dm WhatsApp connection state on `SentDMProfile`: source (`none`, `inherited`, `direct`), status (`not_connected`, `pending`, `active`, `failed`), provider error, connected timestamp, and sync timestamp.
+- Preserved the approved architecture: Sender Profile creation can tolerate an inherited organization-level WABA if Sent.dm requires one, but Chesera does not consider inherited WhatsApp active for the agent.
+- Added `/api/v1/sentdm/profiles/whatsapp/connect/` so paid agents can later submit their own Meta WABA ID, phone number ID, and access token after Sender Profile creation.
+- On successful direct WABA acceptance, the profile becomes agent-WhatsApp active. On Sent.dm/Meta rejection, the profile is marked failed and the API returns a clear credential/ownership/permission hint.
+- Updated outbound channel policy so profile-bound `auto` resolves to SMS when direct agent WhatsApp is not active, preventing accidental sends through inherited organization WhatsApp.
+- Updated serializers so profile responses expose `is_agent_whatsapp_active` for frontend gating.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q sentdm`
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py test sentdm` (38 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (51 tests)

@@ -4,12 +4,14 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from ai.ai_service import AIService
 from business.models import PhoneNumber, PhoneNumberStatus
@@ -18,7 +20,7 @@ from communications.models import Conversation, Message
 from crm.choices import LeadStage
 from crm.models import FollowUpReminder, Lead
 
-from .choices import SentDMChannel, SentDMCampaignStatus, SentDMMessageDirection, SentDMMessageStatus, SentDMProfileStatus, SentDMWebhookEventStatus
+from .choices import SentDMChannel, SentDMCampaignStatus, SentDMMessageDirection, SentDMMessageStatus, SentDMProfileStatus, SentDMWebhookEventStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from .client import SentDMClient, SentDMClientError
 from .models import SentDMCampaign, SentDMMessage, SentDMProfile, SentDMWebhookEvent
 
@@ -107,11 +109,50 @@ def build_profile_payload(organization, user, overrides=None):
         }
     return payload
 
-def upsert_profile_from_response(response, *, user=None, organization=None):
+def get_response_whatsapp_phone_number(data):
+    return (
+        data.get("whatsapp_phone_number")
+        or data.get("whatsappPhoneNumber")
+        or data.get("sending_whatsapp_number")
+        or data.get("sendingWhatsappNumber")
+        or ""
+    )
+
+
+def is_agent_whatsapp_active(profile):
+    return bool(profile and getattr(profile, "is_agent_whatsapp_active", False))
+
+
+def upsert_profile_from_response(response, *, user=None, organization=None, direct_whatsapp_requested=False):
     data = response.get("data") or {}
     profile_id = data.get("id")
     if not profile_id:
         return None
+
+    existing_profile = SentDMProfile.objects.filter(profile_id=profile_id).first()
+    returned_whatsapp_number = get_response_whatsapp_phone_number(data)
+    now = timezone.now()
+
+    if direct_whatsapp_requested:
+        whatsapp_source = SentDMWhatsAppConnectionSource.DIRECT
+        whatsapp_status = SentDMWhatsAppConnectionStatus.ACTIVE if returned_whatsapp_number else SentDMWhatsAppConnectionStatus.PENDING
+        whatsapp_phone_number = returned_whatsapp_number
+        whatsapp_connected_at = now if returned_whatsapp_number else None
+    elif existing_profile and existing_profile.whatsapp_connection_source == SentDMWhatsAppConnectionSource.DIRECT:
+        whatsapp_source = SentDMWhatsAppConnectionSource.DIRECT
+        whatsapp_status = existing_profile.whatsapp_connection_status
+        whatsapp_phone_number = returned_whatsapp_number or existing_profile.whatsapp_phone_number
+        whatsapp_connected_at = existing_profile.whatsapp_connected_at
+    elif returned_whatsapp_number:
+        whatsapp_source = SentDMWhatsAppConnectionSource.INHERITED
+        whatsapp_status = SentDMWhatsAppConnectionStatus.NOT_CONNECTED
+        whatsapp_phone_number = ""
+        whatsapp_connected_at = None
+    else:
+        whatsapp_source = SentDMWhatsAppConnectionSource.NONE
+        whatsapp_status = SentDMWhatsAppConnectionStatus.NOT_CONNECTED
+        whatsapp_phone_number = ""
+        whatsapp_connected_at = None
 
     profile, _ = SentDMProfile.objects.update_or_create(
         profile_id=profile_id,
@@ -124,14 +165,19 @@ def upsert_profile_from_response(response, *, user=None, organization=None):
             "email": data.get("email") or "",
             "status": normalize_profile_status(data.get("status")),
             "phone_number": data.get("sending_phone_number") or "",
-            "whatsapp_phone_number": data.get("whatsapp_phone_number") or "",
+            "whatsapp_phone_number": whatsapp_phone_number,
+            "whatsapp_connection_source": whatsapp_source,
+            "whatsapp_connection_status": whatsapp_status,
+            "whatsapp_connection_error": "",
+            "whatsapp_connected_at": whatsapp_connected_at,
+            "whatsapp_last_synced_at": now if whatsapp_source != SentDMWhatsAppConnectionSource.NONE else None,
             "billing_model": data.get("billing_model") or "organization",
             "inherit_contacts": bool(data.get("inherit_contacts", False)),
             "inherit_templates": bool(data.get("inherit_templates", False)),
             "inherit_tcr_brand": bool(data.get("inherit_tcr_brand", True)),
             "inherit_tcr_campaign": bool(data.get("inherit_tcr_campaign", True)),
             "sandbox": getattr(settings, "SENTDM_SANDBOX_MODE", True),
-            "last_synced_at": timezone.now(),
+            "last_synced_at": now,
             "raw_response": response,
         },
     )
@@ -143,11 +189,93 @@ def create_profile_for_user(user, profile_data=None):
     payload = build_profile_payload(organization, user, overrides=profile_data)
     client = SentDMClient()
     response = client.create_profile(payload, idempotency_key=f"chesera-profile-user-{user.id}")
-    profile = upsert_profile_from_response(response, user=user, organization=organization)
+    profile = upsert_profile_from_response(response, user=user, organization=organization, direct_whatsapp_requested=bool(get_sentdm_whatsapp_business_account(organization)))
     return profile, response
 
 
 
+def build_direct_whatsapp_payload(waba_id, phone_number_id, access_token):
+    return {
+        "whatsapp_business_account": {
+            "waba_id": str(waba_id or "").strip(),
+            "phone_number_id": str(phone_number_id or "").strip(),
+            "access_token": str(access_token or "").strip(),
+        }
+    }
+
+
+def save_organization_whatsapp_credentials(organization, whatsapp_data):
+    if not organization:
+        return
+    organization.sentdm_whatsapp_waba_id = whatsapp_data["waba_id"]
+    organization.sentdm_whatsapp_phone_number_id = whatsapp_data["phone_number_id"]
+    organization.sentdm_whatsapp_access_token = whatsapp_data["access_token"]
+    organization.save(
+        update_fields=[
+            "sentdm_whatsapp_waba_id",
+            "sentdm_whatsapp_phone_number_id",
+            "sentdm_whatsapp_access_token",
+            "updated_at",
+        ]
+    )
+
+
+def mark_profile_whatsapp_failed(profile, error):
+    if not profile:
+        return
+    now = timezone.now()
+    profile.whatsapp_connection_source = SentDMWhatsAppConnectionSource.DIRECT
+    profile.whatsapp_connection_status = SentDMWhatsAppConnectionStatus.FAILED
+    profile.whatsapp_connection_error = str(error)
+    profile.whatsapp_last_synced_at = now
+    profile.save(
+        update_fields=[
+            "whatsapp_connection_source",
+            "whatsapp_connection_status",
+            "whatsapp_connection_error",
+            "whatsapp_last_synced_at",
+            "updated_at",
+        ]
+    )
+
+
+def connect_agent_whatsapp_for_user(user, whatsapp_data, profile_id=None):
+    profile = get_profile_for_user(user, profile_id=profile_id)
+    if not profile:
+        raise ValidationError({"profile": "Create a Sent.dm Sender Profile before connecting WhatsApp."})
+
+    account = build_direct_whatsapp_payload(
+        whatsapp_data.get("waba_id"),
+        whatsapp_data.get("phone_number_id"),
+        whatsapp_data.get("access_token"),
+    )["whatsapp_business_account"]
+    if not all(account.values()):
+        raise ValidationError(
+            {
+                "whatsapp": "waba_id, phone_number_id, and access_token are all required to connect the agent's WhatsApp Business Account."
+            }
+        )
+
+    payload = {"whatsapp_business_account": account}
+    client = SentDMClient()
+    try:
+        response = client.update_profile(
+            profile.profile_id,
+            payload,
+            idempotency_key=f"chesera-profile-whatsapp-{profile.profile_id}-{int(time.time())}",
+        )
+    except SentDMClientError as exc:
+        mark_profile_whatsapp_failed(profile, exc)
+        raise
+
+    save_organization_whatsapp_credentials(profile.organization, account)
+    profile = upsert_profile_from_response(
+        response,
+        user=profile.user or user,
+        organization=profile.organization or get_organization_for_user(user),
+        direct_whatsapp_requested=True,
+    )
+    return profile, response
 SENTDM_10DLC_REQUIRED_FIELDS = {
     "sentdm_legal_name": "Legal business name is required for 10DLC registration.",
     "sentdm_support_email": "Support email is required for HELP autoresponses.",
@@ -270,9 +398,15 @@ def get_sentdm_profile_creation_readiness(user):
         "ready": not missing_fields,
         "missing_fields": missing_fields,
         "messages": messages,
+        "warnings": [
+            "No direct WhatsApp WABA credentials were provided. Sent.dm documents that Sender Profile creation must inherit an organization-level WhatsApp Business Account or include direct WABA credentials; if the organization channel is not configured, Sent.dm may reject profile creation with HTTP 422."
+        ] if not get_sentdm_whatsapp_business_account(organization) else [],
+        "has_direct_whatsapp_business_account": bool(get_sentdm_whatsapp_business_account(organization)),
         "sample_message_count": len(sample_messages),
         "messaging_use_case_us": use_case,
     }
+
+
 def get_sentdm_sample_messages(organization):
     return [
         str(getattr(organization, field, "") or "").strip()
@@ -397,7 +531,46 @@ def normalize_message_status(response):
     return SentDMMessageStatus.QUEUED
 
 
-def send_sentdm_message(*, user, to, text, profile=None, channel="auto", idempotency_prefix="message"):
+
+WHATSAPP_CUSTOMER_SERVICE_WINDOW_HOURS = 24
+FOLLOW_UP_MESSAGE_PURPOSE = "follow_up"
+REPLY_MESSAGE_PURPOSE = "reply"
+
+
+def lead_has_active_whatsapp_window(lead, now=None):
+    if not lead or not lead.last_incoming_at:
+        return False
+    now = now or timezone.now()
+    return lead.last_incoming_at >= now - timedelta(hours=WHATSAPP_CUSTOMER_SERVICE_WINDOW_HOURS)
+
+
+def resolve_outbound_channel(*, profile=None, requested_channel=SentDMChannel.AUTO, purpose="direct", lead=None, now=None):
+    channel = requested_channel or SentDMChannel.AUTO
+    if channel not in SentDMChannel.values:
+        raise ValidationError({"channel": "Unsupported Sent.dm channel."})
+
+    agent_whatsapp_active = is_agent_whatsapp_active(profile)
+
+    if channel == SentDMChannel.AUTO and profile and not agent_whatsapp_active:
+        return SentDMChannel.SMS
+
+    if channel == SentDMChannel.WHATSAPP:
+        if not agent_whatsapp_active:
+            if purpose in {REPLY_MESSAGE_PURPOSE, FOLLOW_UP_MESSAGE_PURPOSE}:
+                return SentDMChannel.SMS
+            raise ValidationError(
+                {
+                    "whatsapp": "WhatsApp is not active for this Sender Profile. Connect and verify the agent's own Meta WhatsApp Business Account first, or send with SMS/RCS."
+                }
+            )
+        if purpose == FOLLOW_UP_MESSAGE_PURPOSE and not lead_has_active_whatsapp_window(lead, now=now):
+            return SentDMChannel.SMS
+
+    return channel
+
+
+def send_sentdm_message(*, user, to, text, profile=None, channel="auto", idempotency_prefix="message", purpose="direct", lead=None):
+    channel = resolve_outbound_channel(profile=profile, requested_channel=channel, purpose=purpose, lead=lead)
     client = SentDMClient()
     response = client.send_message(
         to=to,
@@ -422,7 +595,7 @@ def send_sentdm_message(*, user, to, text, profile=None, channel="auto", idempot
     return message, response
 
 
-def send_sandbox_message(*, user, to, text, profile=None, channel="auto"):
+def send_sandbox_message(*, user, to, text, profile=None, channel="auto", purpose="direct", lead=None):
     return send_sentdm_message(
         user=user,
         to=to,
@@ -430,10 +603,12 @@ def send_sandbox_message(*, user, to, text, profile=None, channel="auto"):
         profile=profile,
         channel=channel,
         idempotency_prefix="sandbox-message",
+        purpose=purpose,
+        lead=lead,
     )
 
 
-def send_live_message(*, user, to, text, profile=None, channel="auto"):
+def send_live_message(*, user, to, text, profile=None, channel="auto", purpose="direct", lead=None):
     return send_sentdm_message(
         user=user,
         to=to,
@@ -441,6 +616,8 @@ def send_live_message(*, user, to, text, profile=None, channel="auto"):
         profile=profile,
         channel=channel,
         idempotency_prefix="live-message",
+        purpose=purpose,
+        lead=lead,
     )
 
 
@@ -643,14 +820,20 @@ def send_control_autoresponse(profile, lead, conversation, text, channel, kind):
         return None
 
     try:
+        send_channel = resolve_outbound_channel(
+            profile=profile,
+            requested_channel=channel,
+            purpose=REPLY_MESSAGE_PURPOSE,
+            lead=lead,
+        )
         response = SentDMClient().send_message(
             to=lead.contact_number,
             text=text,
             profile_id=profile.profile_id,
-            channel=channel if channel in SentDMChannel.values and channel != SentDMChannel.AUTO else None,
+            channel=send_channel,
             idempotency_key=f"chesera-sentdm-{kind}-{lead.id}-{int(time.time())}",
         )
-    except (ImproperlyConfigured, SentDMClientError):
+    except (ImproperlyConfigured, SentDMClientError, ValidationError):
         return None
     message_id = extract_first_message_id(response) or f"sentdm-{kind}-{lead.id}-{int(time.time())}"
     sentdm_message = SentDMMessage.objects.create(
@@ -660,8 +843,8 @@ def send_control_autoresponse(profile, lead, conversation, text, channel, kind):
         conversation=conversation,
         sent_message_id=message_id,
         direction=SentDMMessageDirection.OUTBOUND,
-        channel=channel or SentDMChannel.AUTO,
-        from_number=profile.phone_number or profile.whatsapp_phone_number,
+        channel=send_channel or SentDMChannel.AUTO,
+        from_number=profile.whatsapp_phone_number if send_channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number,
         to_number=lead.contact_number,
         body=text,
         status=normalize_message_status(response),
@@ -680,7 +863,7 @@ def send_control_autoresponse(profile, lead, conversation, text, channel, kind):
                 "content": text,
                 "provider_status": sentdm_message.status,
                 "status": MessageStatus.QUEUED if sentdm_message.status == SentDMMessageStatus.QUEUED else MessageStatus.SENT,
-                "metadata": {"source": "sentdm", "control_response": kind, "channel": channel or "auto"},
+                "metadata": {"source": "sentdm", "control_response": kind, "channel": send_channel or "auto", "requested_channel": channel or "auto"},
             },
         )
         conversation.total_messages += 1
@@ -702,10 +885,6 @@ def normalize_ai_stage(stage):
     return LeadStage.CONTACTED
 
 
-def outbound_channel_for_reply(channel):
-    if channel in SentDMChannel.values and channel != SentDMChannel.AUTO:
-        return channel
-    return None
 
 
 def send_ai_reply_for_inbound(profile, lead, conversation, channel):
@@ -722,16 +901,22 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
     if not reply_text:
         return {"sent": False, "reason": "empty_ai_reply"}
 
+    send_channel = resolve_outbound_channel(
+        profile=profile,
+        requested_channel=channel,
+        purpose=REPLY_MESSAGE_PURPOSE,
+        lead=lead,
+    )
     response = SentDMClient().send_message(
         to=lead.contact_number,
         text=reply_text,
         profile_id=profile.profile_id,
-        channel=outbound_channel_for_reply(channel),
+        channel=send_channel,
         idempotency_key=f"chesera-sentdm-ai-{conversation.id}-{int(time.time())}",
     )
     message_id = extract_first_message_id(response) or f"sentdm-ai-{conversation.id}-{int(time.time())}"
     sentdm_status = normalize_message_status(response)
-    from_number = profile.whatsapp_phone_number if channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number
+    from_number = profile.whatsapp_phone_number if send_channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number
 
     sentdm_message = SentDMMessage.objects.create(
         organization=profile.organization,
@@ -740,7 +925,7 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
         conversation=conversation,
         sent_message_id=message_id,
         direction=SentDMMessageDirection.OUTBOUND,
-        channel=channel or SentDMChannel.AUTO,
+        channel=send_channel or SentDMChannel.AUTO,
         from_number=from_number,
         to_number=lead.contact_number,
         body=reply_text,
@@ -761,7 +946,7 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
             "provider_status": sentdm_status,
             "status": message_status,
             "is_ai_generated": True,
-            "metadata": {"source": "sentdm", "channel": channel or "auto", "ai_stage": ai_response.get("stage", "")},
+            "metadata": {"source": "sentdm", "channel": send_channel or "auto", "requested_channel": channel or "auto", "ai_stage": ai_response.get("stage", "")},
         },
     )
 

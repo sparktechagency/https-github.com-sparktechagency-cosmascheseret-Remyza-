@@ -12,6 +12,7 @@ The approved V1 messaging direction is:
 - Sent.dm handles dedicated messaging numbers.
 - WhatsApp is optional in V1: agents may connect their own existing Meta-approved WABA using WABA ID, phone number ID, and access token.
 - SMS/RCS activation must not be blocked by missing WhatsApp credentials.
+- Inherited organization WhatsApp may support Sent.dm profile creation, but it is not treated as the agent-owned active WhatsApp channel.
 - Each paid agent/company gets one isolated Sent.dm Sender Profile.
 - Free users get dashboard access only, with no live messaging number.
 - Agents never touch Sent.dm directly.
@@ -57,7 +58,7 @@ Important interpretation:
 - The API key is valid for sandbox/API-shape testing.
 - Sandbox responses do not prove real profile creation, real number provisioning, or real 10DLC submission.
 - Sent.dm docs say real Sender Profile provisioning requires an organization account and an organization API key whose user has admin role.
-- Before live rollout, confirm `GET /v3/me` returns `type: "organization"` with the production organization key.
+- MCP verification on 2026-09-10 confirmed the connected Sent account returns `type: "organization"`, name `Chesera LLC`, and id `80c15901-8bd6-407f-b623-0958c0374a98`. Before live rollout, still confirm the deployed production environment uses the same intended organization key.
 
 ## CURRENT VERIFICATION BASELINE
 
@@ -80,4 +81,17 @@ The backend now verifies Sent.dm webhook signatures, stores raw webhook events, 
 
 STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT are handled before any future AI processing. The matched lead is permanently opted out, AI is disabled, active conversations are closed, and pending follow-up reminders are suppressed. HELP sends the organization's configured help response through Sent.dm.
 
-Celery/Redis async processing is now wired for inbound Sent.dm webhooks. The request path verifies/stores the webhook and queues `process_sentdm_webhook_event_task`; STOP/HELP processing and AI reply generation happen in the worker. Normal inbound messages are mirrored into the CRM conversation, passed to the existing AI service, sent back through the matched Sent.dm Sender Profile, and stored as outbound `SentDMMessage` plus `communications.Message`. HOT AI stages disable lead/conversation AI for handoff. The AI prompt now includes business identity, support email, approved vertical/use case, STOP opt-out guidance, and Sent.dm/10DLC-safe response rules. Next messaging work is outbound send rules and follow-up channel routing; see `.codex/REMAINING_WORK.md` for the live checklist. Production migration note: `FollowUpReminder.id` intentionally remains UUID to match existing deployed database history.
+Celery/Redis async processing is now wired for inbound Sent.dm webhooks. The request path verifies/stores the webhook and queues `process_sentdm_webhook_event_task`; STOP/HELP processing and AI reply generation happen in the worker. Normal inbound messages are mirrored into the CRM conversation, passed to the existing AI service, sent back through the matched Sent.dm Sender Profile, and stored as outbound `SentDMMessage` plus `communications.Message`. HOT AI stages disable lead/conversation AI for handoff. The AI prompt now includes business identity, support email, approved vertical/use case, STOP opt-out guidance, and Sent.dm/10DLC-safe response rules. Outbound Sent.dm sends now share a channel policy: auto/SMS/RCS are allowed without WhatsApp, explicit WhatsApp requires an active WhatsApp number on the Sender Profile, and follow-up sends requested over WhatsApp route to SMS outside Meta's 24-hour customer-service window. The current follow-up task still sends push reminders only; actual Day 1/3/7/14 outbound lead messages remain a product-scope build item. See `.codex/REMAINING_WORK.md` for the live checklist. Production migration note: `FollowUpReminder.id` intentionally remains UUID to match existing deployed database history.
+
+## SENT.DM VERIFICATION NOTES
+
+Verified against Sent.dm docs and MCP on 2026-09-10:
+
+- `POST /v3/messages` supports free-form `text`, but free-form text is intended for open/reply conversations. First outbound outreach to a contact should use an approved template.
+- Sent's REST `channel` field is an array for explicit channels, e.g. `["sms"]`; auto routing is represented by omitting `channel` or using Sent's auto value. Our client keeps the internal API value `auto` and omits `channel` when sending to Sent.
+- Explicit channel pinning disables automatic fallback. Cross-channel fallback is available only when using automatic selection.
+- Sender Profile creation requires an organization account and admin-capable organization API key.
+- Current Sent docs state each Sender Profile must either inherit an organization-level WhatsApp Business Account or include direct WABA credentials. If the organization WhatsApp channel is not configured and direct WABA fields are omitted, Sent may reject profile creation with HTTP 422.
+- Chesera now tracks WhatsApp connection source/status separately. Inherited organization WhatsApp is recorded as not connected for the agent; direct agent WABA is required before WhatsApp is considered active for that Sender Profile.
+- Outbound auto sends for a profile without active agent WhatsApp resolve to SMS locally so Sent.dm does not accidentally route through Chesera/org WhatsApp. Explicit WhatsApp sends fail for manual/direct messages unless direct agent WhatsApp is active; reply/follow-up flows can fall back to SMS.
+- MCP confirmed the connected account is an organization and has approved OPT_IN, OPT_OUT, and HELP templates, but MCP did not expose Sender Profile creation, webhook management, 10DLC submission, or channel configuration status tools.

@@ -13,14 +13,14 @@ Status legend:
 
 ## 1. PRODUCTION SENT.DM VALIDATION
 
-- [ ] Confirm production Sent.dm API key is configured in deployed environment.
-- [ ] Confirm `GET /v3/me` returns the correct Chesera organization/account details.
-- [ ] Confirm the production key has admin access required for Sender Profile creation and profile completion.
+- [ ] Confirm production Sent.dm API key is configured in deployed environment and matches the intended organization account.
+- [x] Confirm connected Sent.dm account details through MCP: organization `Chesera LLC`, id `80c15901-8bd6-407f-b623-0958c0374a98`.
+- [~] Confirm the production key has admin access required for Sender Profile creation and profile completion. MCP confirms organization identity but does not expose profile-create/admin-role verification; verify with live REST create/complete test.
 - [ ] Confirm `SENTDM_SANDBOX_MODE=False` only when ready for controlled live testing.
 - [ ] Run one controlled live Sender Profile creation test.
 - [ ] Run one controlled live 10DLC campaign submission test.
 - [ ] Confirm real Sent.dm number assignment/status behavior.
-- [ ] Confirm optional WhatsApp WABA config behavior with a real prepared WABA, if client provides test credentials.
+- [~] Confirm optional WhatsApp/WABA behavior with real credentials. Code now allows inherited organization WABA for provider profile creation without activating agent WhatsApp locally; live validation still needs one real direct-WABA connection test.
 
 ## 2. SENT.DM WEBHOOK SETUP
 
@@ -119,19 +119,20 @@ STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT
 
 ## 9. OUTBOUND SEND RULES
 
-- [ ] Confirm final channel-selection behavior for `auto`, `sms`, `rcs`, and `whatsapp`.
-- [ ] Keep WhatsApp optional; do not block SMS/RCS when WhatsApp is missing.
-- [ ] For explicit `channel=whatsapp`, require active `SentDMProfile.whatsapp_phone_number`.
-- [ ] Route scheduled follow-ups outside Meta's 24-hour WhatsApp window to SMS.
-- [ ] Track last inbound WhatsApp timestamp per lead/conversation if WhatsApp free-form replies are used.
-- [ ] Add tests for WhatsApp 24-hour window routing.
+- [x] Confirm final channel-selection behavior for `auto`, `sms`, `rcs`, and `whatsapp` in the shared Sent.dm service policy.
+- [x] Keep WhatsApp optional; do not block SMS/RCS when WhatsApp is missing.
+- [x] For explicit `channel=whatsapp`, require an active direct agent-owned WhatsApp connection, not merely an inherited organization WABA.
+- [~] Route scheduled follow-ups outside Meta's 24-hour WhatsApp window to SMS. Shared channel policy is implemented and tested; the existing follow-up task currently sends push reminders, not outbound lead messages.
+- [x] Track/check the active WhatsApp customer-service window using `Lead.last_incoming_at`.
+- [x] Add tests for WhatsApp 24-hour window routing.
+- [ ] Build actual scheduled outbound follow-up message sending if product scope requires Day 1/3/7/14 texts instead of agent push reminders. Use templates for first outbound/new-contact messages; free-form text is safest for inbound/reply conversations only.
 
 ## 10. ACTIVATION STATUS SYNC
 
 - [ ] Store and display Sender Profile status from Sent.dm.
 - [ ] Store and display 10DLC campaign status from Sent.dm.
 - [ ] Store and display number assignment status.
-- [ ] Store and display WhatsApp active/not connected state.
+- [x] Store WhatsApp active/not connected state locally on `SentDMProfile`; frontend display wiring remains in the mobile/UI checklist.
 - [ ] Update `/api/v1/me/plan-and-progress/` with production status values.
 - [ ] Add dashboard-ready messages:
 
@@ -147,7 +148,7 @@ Messaging activation needs attention.
 
 - [ ] Wire IAP subscription creation/listing endpoints.
 - [ ] Wire business compliance form fields.
-- [ ] Wire optional WhatsApp fields:
+- [ ] Wire optional WhatsApp connection endpoint and fields:
 
 ```text
 waba_id
