@@ -129,12 +129,12 @@ STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT
 
 ## 10. ACTIVATION STATUS SYNC
 
-- [ ] Store and display Sender Profile status from Sent.dm.
-- [ ] Store and display 10DLC campaign status from Sent.dm.
-- [ ] Store and display number assignment status.
+- [x] Store and return Sender Profile status from Sent.dm in `/api/v1/me/plan-and-progress/`.
+- [x] Store and return 10DLC campaign status from Sent.dm in `/api/v1/me/plan-and-progress/`.
+- [x] Store and return number assignment status from Sent.dm profile data in `/api/v1/me/plan-and-progress/`.
 - [x] Store WhatsApp active/not connected state locally on `SentDMProfile`; frontend display wiring remains in the mobile/UI checklist.
-- [ ] Update `/api/v1/me/plan-and-progress/` with production status values.
-- [ ] Add dashboard-ready messages:
+- [x] Update `/api/v1/me/plan-and-progress/` with backend activation status values for subscription, compliance, profile, number, campaign, SMS/RCS, and WhatsApp.
+- [x] Add dashboard-ready messages:
 
 ```text
 Messaging activation in progress, usually 1-3 business days.
@@ -142,7 +142,7 @@ Messaging active.
 Messaging activation needs attention.
 ```
 
-- [ ] Add tests for plan/progress status transitions.
+- [x] Add tests for plan/progress status transitions.
 
 ## 11. FRONTEND / MOBILE INTEGRATION
 

@@ -308,24 +308,33 @@ class CurrentUserPlanAndProgressAPIView(APIView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.progress = {
-            "total_steps": 5,
+            "total_steps": 6,
             "completed_steps": 0,
             "percentage": 0,
             "steps": [],
         }
         self.response = {}
+        self.organization = None
+        self.sentdm_profile = None
+        self.sentdm_campaign = None
+        self.compliance_ready = False
 
-    def add_progress(self, title, completed, description=""):
+    def add_progress(self, title, completed, description="", key="", status_value=""):
         weight = int(100 / self.progress["total_steps"])
         if completed:
             self.progress["completed_steps"] += 1
 
-        self.progress["steps"].append({
+        step = {
             "title": title,
             "completed": completed,
             "percentage": weight,
             "description": description,
-        })
+        }
+        if key:
+            step["key"] = key
+        if status_value:
+            step["status"] = status_value
+        self.progress["steps"].append(step)
 
     def get_active_subscription(self, user):
         return SubscriptionValidationService.get_paid_active_subscription(user)
@@ -340,6 +349,8 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "Subscription Active",
             subscription is not None,
             "Paid messaging unlocks after an active Apple/Google subscription record exists.",
+            key="subscription",
+            status_value="active" if subscription else "inactive",
         )
         return subscription
 
@@ -351,6 +362,8 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "Business Profile Created",
             organization is not None,
             "Business profile is required before Sent.dm Sender Profile setup.",
+            key="business_profile",
+            status_value="complete" if organization else "missing",
         )
         return organization
 
@@ -361,6 +374,8 @@ class CurrentUserPlanAndProgressAPIView(APIView):
                 "Compliance Details Added",
                 False,
                 "Complete the business profile before adding Sent.dm compliance details.",
+                key="sentdm_compliance",
+                status_value="missing",
             )
             return None
 
@@ -368,13 +383,15 @@ class CurrentUserPlanAndProgressAPIView(APIView):
 
         readiness = get_sentdm_compliance_readiness(self.request.user)
         self.response["sentdm_compliance"] = readiness
-        compliance_complete = not any(
+        self.compliance_ready = not any(
             field != "sentdm_profile" for field in readiness.get("missing_fields", [])
         )
         self.add_progress(
             "Compliance Details Added",
-            compliance_complete,
+            self.compliance_ready,
             "Legal business details, opt-in flow, sample messages, autoresponses, and policy links are required for 10DLC.",
+            key="sentdm_compliance",
+            status_value="complete" if self.compliance_ready else "missing",
         )
         return readiness
 
@@ -393,20 +410,45 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "status": profile.status,
             "phone_number": profile.phone_number,
             "whatsapp_phone_number": profile.whatsapp_phone_number,
+            "whatsapp_connection_source": getattr(profile, "whatsapp_connection_source", "none"),
+            "whatsapp_connection_status": getattr(profile, "whatsapp_connection_status", "not_connected"),
+            "whatsapp_connection_error": getattr(profile, "whatsapp_connection_error", ""),
+            "is_agent_whatsapp_active": getattr(profile, "is_agent_whatsapp_active", False),
             "sandbox": profile.sandbox,
         } if profile else None
         self.add_progress(
             "Sent.dm Sender Profile Created",
             profile is not None,
-            "Sender Profile is created manually during sandbox/testing and later can be triggered after paid upgrade.",
+            "Sender Profile is created after paid subscription and complete business compliance details.",
+            key="sentdm_profile",
+            status_value=profile.status if profile else "missing",
         )
         return profile
+
+    def process_sentdm_number(self):
+        phone_number = self.sentdm_profile.phone_number if self.sentdm_profile else ""
+        number_assigned = bool(phone_number)
+        self.response["sentdm_number"] = {
+            "assigned": number_assigned,
+            "phone_number": phone_number or None,
+            "status": "assigned" if number_assigned else "pending",
+            "message": "Messaging number assigned." if number_assigned else "Messaging number is not assigned yet.",
+        }
+        self.add_progress(
+            "Sent.dm Number Assigned",
+            number_assigned,
+            "A dedicated SMS/RCS number is assigned by Sent.dm after Sender Profile processing.",
+            key="sentdm_number",
+            status_value="assigned" if number_assigned else "pending",
+        )
+        return number_assigned
 
     def process_sentdm_campaign(self):
         campaign = None
         if self.sentdm_profile:
             campaign = self.sentdm_profile.campaigns.order_by("-created_at").first()
 
+        self.sentdm_campaign = campaign
         self.response["sentdm_campaign"] = {
             "id": campaign.id,
             "campaign_id": campaign.campaign_id,
@@ -419,8 +461,94 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "10DLC Campaign Submitted",
             campaign is not None,
             "Campaign submission uses the business compliance details and usually activates within 1-3 business days after real provider approval.",
+            key="sentdm_campaign",
+            status_value=campaign.status if campaign else "missing",
         )
         return campaign
+
+    def get_whatsapp_status(self):
+        profile = self.sentdm_profile
+        if not profile:
+            return {
+                "status": "not_connected",
+                "source": "none",
+                "active": False,
+                "phone_number": None,
+                "error": "",
+                "message": "WhatsApp is optional and can be connected after the Sender Profile is created.",
+            }
+
+        source = getattr(profile, "whatsapp_connection_source", "none") or "none"
+        status_value = getattr(profile, "whatsapp_connection_status", "not_connected") or "not_connected"
+        active = getattr(profile, "is_agent_whatsapp_active", False)
+        if active:
+            message = "WhatsApp is active for this agent."
+        elif status_value == "failed":
+            message = "WhatsApp connection failed. Please check the WABA ID, phone number ID, access token, and Meta permissions."
+        elif status_value == "pending":
+            message = "WhatsApp connection is pending Sent.dm/Meta acceptance."
+        elif source == "inherited":
+            message = "WhatsApp is optional and not connected for this agent. SMS/RCS can continue normally."
+        else:
+            message = "WhatsApp is optional and not connected. SMS/RCS can continue normally."
+
+        return {
+            "status": status_value,
+            "source": source,
+            "active": active,
+            "phone_number": profile.whatsapp_phone_number if active else None,
+            "error": getattr(profile, "whatsapp_connection_error", ""),
+            "message": message,
+        }
+
+    def process_activation_status(self, subscription):
+        profile = self.sentdm_profile
+        campaign = self.sentdm_campaign
+        number_assigned = bool(profile and profile.phone_number)
+        campaign_status = campaign.status if campaign else ""
+        profile_status = profile.status if profile else ""
+
+        if not subscription:
+            status_value = "subscription_required"
+            message = "Messaging activates after a paid subscription is active."
+        elif not self.organization:
+            status_value = "business_profile_required"
+            message = "Complete the business profile before messaging activation can start."
+        elif not self.compliance_ready:
+            status_value = "compliance_required"
+            message = "Complete the Sent.dm compliance details before messaging activation can start."
+        elif not profile:
+            status_value = "sender_profile_required"
+            message = "Create the Sent.dm Sender Profile to start messaging activation."
+        elif profile_status == "failed" or campaign_status == "FAILED":
+            status_value = "needs_attention"
+            message = "Messaging activation needs attention."
+        elif number_assigned and campaign and campaign_status == "ACTIVE":
+            status_value = "active"
+            message = "Messaging active."
+        elif number_assigned and campaign:
+            status_value = "activation_in_progress"
+            message = "Messaging activation in progress, usually 1-3 business days."
+        elif number_assigned:
+            status_value = "campaign_required"
+            message = "Messaging number is assigned. Submit the 10DLC campaign to continue activation."
+        else:
+            status_value = "activation_in_progress"
+            message = "Messaging activation in progress, usually 1-3 business days."
+
+        self.response["whatsapp"] = self.get_whatsapp_status()
+        self.response["messaging_activation"] = {
+            "status": status_value,
+            "message": message,
+            "sms_rcs": {
+                "number_assigned": number_assigned,
+                "phone_number": profile.phone_number if profile and profile.phone_number else None,
+                "profile_status": profile_status or None,
+                "campaign_status": campaign_status or None,
+                "active": status_value == "active",
+            },
+            "whatsapp": self.response["whatsapp"],
+        }
 
     def finalize_progress(self):
         self.progress["percentage"] = int(
@@ -432,11 +560,13 @@ class CurrentUserPlanAndProgressAPIView(APIView):
         self.request = request
         user = request.user
 
-        self.process_subscription(user)
+        subscription = self.process_subscription(user)
         self.process_organization(user)
         self.process_compliance()
         self.process_sentdm_profile()
+        self.process_sentdm_number()
         self.process_sentdm_campaign()
+        self.process_activation_status(subscription)
         self.finalize_progress()
 
         return Response({
@@ -444,7 +574,6 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "message": "User plan and Sent.dm setup progress retrieved successfully.",
             "data": self.response,
         })
-
 ClientSendOTPAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],

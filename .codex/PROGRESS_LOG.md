@@ -479,3 +479,18 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py test sentdm` (38 tests)
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (51 tests)
+
+## 2026-09-10 - Plan Progress Activation Status Sync
+
+- Updated `/api/v1/me/plan-and-progress/` to return a fuller Sent.dm activation snapshot while preserving existing subscription, organization, profile, campaign, and progress response keys.
+- Added `sentdm_number`, `whatsapp`, and `messaging_activation` response sections for dashboard/mobile display.
+- The endpoint now reports subscription-required, business-profile-required, compliance-required, Sender Profile required, campaign required, activation-in-progress, active, and needs-attention states.
+- Added dashboard-ready activation messages, including `Messaging activation in progress, usually 1-3 business days.`, `Messaging active.`, and `Messaging activation needs attention.`
+- WhatsApp remains optional in the progress response: inherited organization WhatsApp is shown as not connected for the agent, while direct agent-owned WhatsApp can show pending, active, or failed.
+- Added endpoint regression tests for free/dashboard-only users and paid users with active SMS/RCS plus optional WhatsApp not connected.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts` (3 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (53 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`

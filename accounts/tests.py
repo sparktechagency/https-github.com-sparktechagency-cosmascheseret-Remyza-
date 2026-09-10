@@ -12,6 +12,8 @@ from accounts.models import User
 from accounts.views import CurrentUserPlanAndProgressAPIView
 from business.models import Organization
 from subscription.models import UserSubscription
+from sentdm.choices import SentDMCampaignStatus, SentDMProfileStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
+from sentdm.models import SentDMCampaign, SentDMProfile
 
 
 class CurrentUserPlanAndProgressAPIViewTests(TestCase):
@@ -49,3 +51,87 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
         step_titles = [step["title"] for step in response.data["data"]["progress"]["steps"]]
         self.assertIn("Sent.dm Sender Profile Created", step_titles)
         self.assertIn("10DLC Campaign Submitted", step_titles)
+
+    def test_free_user_gets_dashboard_only_activation_status(self):
+        request = self.factory.get("/api/v1/me/plan-and-progress/")
+        force_authenticate(request, user=self.user)
+
+        response = CurrentUserPlanAndProgressAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["data"]["has_active_subscription"])
+        self.assertEqual(response.data["data"]["messaging_activation"]["status"], "subscription_required")
+        self.assertEqual(
+            response.data["data"]["messaging_activation"]["message"],
+            "Messaging activates after a paid subscription is active.",
+        )
+        self.assertFalse(response.data["data"]["messaging_activation"]["sms_rcs"]["active"])
+        self.assertEqual(response.data["data"]["whatsapp"]["status"], "not_connected")
+
+    def test_paid_user_with_active_sentdm_sms_and_optional_whatsapp_not_connected(self):
+        UserSubscription.objects.create(
+            user=self.user,
+            organization=self.organization,
+            product_id="chesera.monthly",
+            plan_type="monthly",
+            medium="apple",
+            transaction_id="txn_progress_active",
+            is_subscription_active=True,
+            start_date=timezone.now(),
+            expiry_date=timezone.now() + timedelta(days=30),
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+        profile = SentDMProfile.objects.create(
+            user=self.user,
+            organization=self.organization,
+            profile_id="profile_progress_active",
+            name="Progress Sender",
+            status=SentDMProfileStatus.APPROVED,
+            phone_number="+15559990000",
+            whatsapp_connection_source=SentDMWhatsAppConnectionSource.INHERITED,
+            whatsapp_connection_status=SentDMWhatsAppConnectionStatus.NOT_CONNECTED,
+        )
+        self.organization.sentdm_legal_name = "Progress Realty LLC"
+        self.organization.sentdm_tax_id = "12-3456789"
+        self.organization.sentdm_vertical = "REAL_ESTATE"
+        self.organization.sentdm_authorized_rep_name = "Progress Agent"
+        self.organization.sentdm_authorized_rep_title = "Owner"
+        self.organization.sentdm_authorized_rep_email = "owner@progressrealty.example"
+        self.organization.sentdm_authorized_rep_phone = "+15559990001"
+        self.organization.sentdm_support_email = "support@progressrealty.example"
+        self.organization.sentdm_support_phone = "+15559990002"
+        self.organization.sentdm_privacy_policy_url = "https://progressrealty.example/privacy"
+        self.organization.sentdm_terms_url = "https://progressrealty.example/terms"
+        self.organization.sentdm_opt_in_url = "https://progressrealty.example/contact"
+        self.organization.sentdm_opt_in_description = "Leads submit the website contact form and agree to receive replies about their inquiry."
+        self.organization.sentdm_messaging_use_case = "Customer care replies for opted-in real estate leads."
+        self.organization.sentdm_messaging_use_case_us = "CUSTOMER_CARE"
+        self.organization.sentdm_sample_message_1 = "Hi Alex! This is the assistant for Progress Realty. Thanks for reaching out about your home search. Reply STOP to opt out."
+        self.organization.sentdm_sample_message_2 = "Progress Realty: We received your property question and can help with next steps. Reply STOP to opt out."
+        self.organization.sentdm_sample_message_3 = "Progress Realty: Thanks for your message about a showing. Reply STOP to opt out."
+        self.organization.sentdm_opt_in_confirmation_message = "Progress Realty: Thanks for opting in. Reply STOP to opt out."
+        self.organization.sentdm_opt_out_confirmation_message = "Progress Realty: You have been unsubscribed and will no longer receive messages."
+        self.organization.sentdm_help_response_message = "Progress Realty: Contact support@progressrealty.example for help. Reply STOP to opt out."
+        self.organization.sentdm_expected_daily_volume = 25
+        self.organization.save()
+        SentDMCampaign.objects.create(
+            profile=profile,
+            organization=self.organization,
+            campaign_id="campaign_progress_active",
+            name="Progress Campaign",
+            status=SentDMCampaignStatus.ACTIVE,
+            submitted_to_tcr=True,
+        )
+        request = self.factory.get("/api/v1/me/plan-and-progress/")
+        force_authenticate(request, user=self.user)
+
+        response = CurrentUserPlanAndProgressAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["messaging_activation"]["status"], "active")
+        self.assertEqual(response.data["data"]["messaging_activation"]["message"], "Messaging active.")
+        self.assertTrue(response.data["data"]["sentdm_number"]["assigned"])
+        self.assertEqual(response.data["data"]["sentdm_number"]["phone_number"], "+15559990000")
+        self.assertEqual(response.data["data"]["whatsapp"]["source"], "inherited")
+        self.assertFalse(response.data["data"]["whatsapp"]["active"])
+        self.assertEqual(response.data["data"]["sentdm_profile"]["is_agent_whatsapp_active"], False)
