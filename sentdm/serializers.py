@@ -11,7 +11,7 @@ class SentDMAccountCheckSerializer(serializers.Serializer):
 
 
 class SentDMProfileSerializer(serializers.ModelSerializer):
-    is_agent_whatsapp_active = serializers.ReadOnlyField()
+    is_agent_whatsapp_active = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = SentDMProfile

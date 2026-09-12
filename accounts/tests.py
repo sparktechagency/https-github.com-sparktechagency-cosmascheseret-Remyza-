@@ -8,14 +8,103 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from accounts.models import User
-from accounts.views import CurrentUserPlanAndProgressAPIView
+from accounts.choices import OTPPurpose
+from accounts.models import OTPVerification, User
+from accounts.views import ClientSignupAPIView, ClientVerifyOTPAPIView, CurrentUserPlanAndProgressAPIView
 from business.models import Organization
 from subscription.models import UserSubscription
 from sentdm.choices import SentDMCampaignStatus, SentDMProfileStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from sentdm.models import SentDMCampaign, SentDMProfile
 
 
+
+class ClientSignupAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.payload = {
+            "full_name": "Test Agent",
+            "email": "agent@example.com",
+            "phone_number": "+15558880000",
+            "city": "Austin",
+            "country": "United States",
+            "country_code": "+1",
+        }
+
+    def test_signup_creates_unverified_user_and_registration_otp(self):
+        request = self.factory.post("/api/v1/client/auth/signup/", self.payload, format="json")
+
+        response = ClientSignupAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 201)
+        user = User.objects.get(phone_number=self.payload["phone_number"])
+        self.assertEqual(user.full_name, "Test Agent")
+        self.assertEqual(user.email, "agent@example.com")
+        self.assertEqual(user.city, "Austin")
+        self.assertEqual(user.country, "United States")
+        self.assertEqual(user.country_code, "+1")
+        self.assertFalse(user.is_phone_verified)
+        self.assertTrue(
+            OTPVerification.objects.filter(
+                user=user,
+                phone_number=self.payload["phone_number"],
+                purpose=OTPPurpose.REGISTER,
+                is_used=False,
+            ).exists()
+        )
+        self.assertEqual(response.data["data"]["user"]["city"], "Austin")
+        self.assertEqual(response.data["data"]["user"]["country"], "United States")
+
+    def test_signup_updates_existing_unverified_user_and_resends_otp(self):
+        user = User.objects.create(
+            phone_number=self.payload["phone_number"],
+            full_name="Old Name",
+            email="old@example.com",
+            is_phone_verified=False,
+        )
+        request = self.factory.post("/api/v1/client/auth/signup/", self.payload, format="json")
+
+        response = ClientSignupAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.full_name, "Test Agent")
+        self.assertEqual(user.email, "agent@example.com")
+        self.assertEqual(user.city, "Austin")
+        self.assertEqual(response.data["data"]["is_new_user"], False)
+        self.assertEqual(OTPVerification.objects.filter(user=user, purpose=OTPPurpose.REGISTER, is_used=False).count(), 1)
+
+    def test_signup_rejects_verified_phone_number(self):
+        User.objects.create(
+            phone_number=self.payload["phone_number"],
+            email="verified@example.com",
+            is_phone_verified=True,
+        )
+        request = self.factory.post("/api/v1/client/auth/signup/", self.payload, format="json")
+
+        response = ClientSignupAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone_number", response.data)
+
+    def test_signup_otp_verify_returns_new_profile_fields(self):
+        signup_request = self.factory.post("/api/v1/client/auth/signup/", self.payload, format="json")
+        ClientSignupAPIView.as_view()(signup_request)
+        otp = OTPVerification.objects.get(phone_number=self.payload["phone_number"], purpose=OTPPurpose.REGISTER)
+        verify_request = self.factory.post(
+            "/api/v1/client/auth/verify-otp/",
+            {"phone_number": self.payload["phone_number"], "otp": otp.otp_code},
+            format="json",
+        )
+
+        response = ClientVerifyOTPAPIView.as_view()(verify_request)
+
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(phone_number=self.payload["phone_number"])
+        self.assertTrue(user.is_phone_verified)
+        self.assertEqual(response.data["data"]["user"]["email"], "agent@example.com")
+        self.assertEqual(response.data["data"]["user"]["city"], "Austin")
+        self.assertEqual(response.data["data"]["user"]["country"], "United States")
+        self.assertEqual(response.data["data"]["user"]["country_code"], "+1")
 class CurrentUserPlanAndProgressAPIViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()

@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    ClientSignupAPIView,
     ClientSendOTPAPIView,
     ClientVerifyOTPAPIView,
     AdminLoginAPIView,
@@ -13,6 +14,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("client/auth/signup/", ClientSignupAPIView.as_view(), name="client-signup"),
     path("client/auth/send-otp/", ClientSendOTPAPIView.as_view(), name="client-send-otp"),
     path("client/auth/verify-otp/", ClientVerifyOTPAPIView.as_view(), name="client-verify-otp"),
     path("admin/auth/login/", AdminLoginAPIView.as_view(), name="admin-auth-login"),

@@ -147,6 +147,7 @@ Messaging activation is in progress. Number assignment may take additional time 
 
 ## 11. FRONTEND / MOBILE INTEGRATION
 
+- [ ] Wire signup endpoint `POST /api/v1/client/auth/signup/` before OTP verification for new users.
 - [ ] Wire IAP subscription creation/listing endpoints.
 - [ ] Wire business compliance form fields.
 - [ ] Wire optional WhatsApp connection endpoint and fields:

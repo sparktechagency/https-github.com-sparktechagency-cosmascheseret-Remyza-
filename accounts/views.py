@@ -10,13 +10,14 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
-from .choices import OTPPurpose
+from .choices import OTPPurpose, UserType
 from .models import OTPVerification, User
 
 from business.serializers import OrganizationSerializer, ProviderAccountSerializer
 from business.models import PhoneNumber
 from .serializers import (
     AdminLoginSerializer,
+    ClientSignupSerializer,
     ClientSendOTPSerializer,
     ClientVerifyOTPSerializer,
     CurrentUserSerializer,
@@ -24,6 +25,44 @@ from .serializers import (
 from django.db import transaction
 
 
+
+class ClientSignupAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = ClientSignupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = serializer.validated_data["phone_number"]
+        user, created = User.objects.get_or_create(
+            phone_number=phone,
+            defaults={
+                "user_type": UserType.CLIENT,
+                "is_phone_verified": False,
+            },
+        )
+        for field in ("full_name", "email", "city", "country", "country_code"):
+            setattr(user, field, serializer.validated_data.get(field, ""))
+        user.user_type = UserType.CLIENT
+        user.save(update_fields=["full_name", "email", "city", "country", "country_code", "user_type", "updated_at"])
+        OTPVerification.objects.create_otp(
+            user=user,
+            phone_number=phone,
+            purpose=OTPPurpose.REGISTER,
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Signup OTP sent successfully.",
+                "data": {
+                    "phone_number": user.phone_number,
+                    "is_new_user": created,
+                    "user": CurrentUserSerializer(user, context={"request": request}).data,
+                },
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 class ClientSendOTPAPIView(APIView):
     permission_classes = [AllowAny]
@@ -72,6 +111,10 @@ class ClientVerifyOTPAPIView(APIView):
                         "id": result["user"].id,
                         "phone_number": result["user"].phone_number,
                         "full_name": result["user"].full_name,
+                        "email": result["user"].email,
+                        "city": result["user"].city,
+                        "country": result["user"].country,
+                        "country_code": result["user"].country_code,
                         "user_type": result["user"].user_type,
                         "is_phone_verified": result["user"].is_phone_verified,
                     },
@@ -596,6 +639,19 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "message": "User plan and Sent.dm setup progress retrieved successfully.",
             "data": self.response,
         })
+ClientSignupAPIView = extend_schema_view(
+    post=extend_schema(
+        tags=["Auth - User"],
+        summary="Signup and send OTP",
+        description="Creates or updates an unverified client user with full name, email, phone number, city, country, and optional country code, then sends a registration OTP. JWT tokens are returned after OTP verification.",
+        request=ClientSignupSerializer,
+        responses={
+            201: OpenApiResponse(description="New user created and signup OTP session started."),
+            200: OpenApiResponse(description="Existing unverified user updated and signup OTP resent."),
+            400: OpenApiResponse(description="Invalid signup payload or verified user already exists."),
+        },
+    ),
+)(ClientSignupAPIView)
 ClientSendOTPAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],

@@ -507,3 +507,21 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (54 tests)
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
+
+## 2026-09-12 - Client Signup OTP Endpoint
+
+- Added `city` and `country` fields to `accounts.User`; `country_code` remains available for dialing code/phone metadata.
+- Added `POST /api/v1/client/auth/signup/` for new client signup with full name, email, phone number, city, country, and optional country code.
+- Signup creates a new unverified client or updates an existing unverified client, then starts a `REGISTER` OTP session.
+- Verified users cannot re-register with the same phone number; they should use login OTP instead.
+- OTP verification response now includes email, city, country, and country code in the returned user object.
+- Updated Django admin and current-user serializer to expose city/country.
+- Added `accounts/migrations/0005_user_city_user_country.py`.
+- Added regression tests for signup creation, unverified-user resend/update, verified-phone rejection, and signup OTP verification returning the new fields.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts` (8 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (58 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`

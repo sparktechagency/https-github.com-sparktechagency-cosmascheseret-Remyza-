@@ -26,7 +26,7 @@ This is a Django + Django REST Framework backend.
 
 Important existing apps:
 
-- `accounts`: custom phone-number users, OTP login, current user, free trial claim.
+- `accounts`: custom phone-number users, full signup OTP start, OTP login/verification, current user, free trial claim.
 - `business`: organizations, business settings, provider accounts, phone numbers, notification settings, current Twilio onboarding endpoints.
 - `core`: reference data, free trial numbers, Twilio configuration/webhook endpoints.
 - `communications`: conversations, messages, AI analysis, outbound queue, webhook-event concepts.
@@ -60,6 +60,12 @@ Important interpretation:
 - Sent.dm docs say real Sender Profile provisioning requires an organization account and an organization API key whose user has admin role.
 - MCP verification on 2026-09-10 confirmed the connected Sent account returns `type: "organization"`, name `Chesera LLC`, and id `80c15901-8bd6-407f-b623-0958c0374a98`. Before live rollout, still confirm the deployed production environment uses the same intended organization key.
 
+## CURRENT AUTH FLOW
+
+- Signup starts with `POST /api/v1/client/auth/signup/` using full name, email, phone number, city, country, and optional country code.
+- Signup creates or updates an unverified client user and sends a registration OTP. It rejects already verified phone numbers so users do not accidentally re-register.
+- Login still uses `POST /api/v1/client/auth/send-otp/` and `POST /api/v1/client/auth/verify-otp/` for existing OTP auth compatibility.
+- OTP verification returns JWT access/refresh tokens and the user profile including email, city, country, and country code.
 ## CURRENT VERIFICATION BASELINE
 
 Last known local checks:
