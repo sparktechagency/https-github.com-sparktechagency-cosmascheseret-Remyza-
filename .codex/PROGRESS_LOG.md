@@ -494,3 +494,16 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (53 tests)
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
+
+## 2026-09-12 - Number Assignment Status Message Contract
+
+- Updated `/api/v1/me/plan-and-progress/` so number assignment now has an explicit `number_assignment_status` contract: `pending`, `assigned`, or `needs_attention`.
+- Added the same status inside `sentdm_number.number_assignment_status` and `messaging_activation.sms_rcs.number_assignment_status` for easier frontend consumption.
+- Updated pending number copy to: `Messaging activation is in progress. Number assignment may take additional time if local inventory is unavailable.`
+- Added regression coverage for a paid user whose Sender Profile exists but no Sent.dm number has been assigned yet.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts` (4 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (54 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`

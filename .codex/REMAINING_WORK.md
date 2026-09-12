@@ -131,7 +131,7 @@ STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT
 
 - [x] Store and return Sender Profile status from Sent.dm in `/api/v1/me/plan-and-progress/`.
 - [x] Store and return 10DLC campaign status from Sent.dm in `/api/v1/me/plan-and-progress/`.
-- [x] Store and return number assignment status from Sent.dm profile data in `/api/v1/me/plan-and-progress/`.
+- [x] Store and return number assignment status from Sent.dm profile data in `/api/v1/me/plan-and-progress/`: `pending`, `assigned`, or `needs_attention`.
 - [x] Store WhatsApp active/not connected state locally on `SentDMProfile`; frontend display wiring remains in the mobile/UI checklist.
 - [x] Update `/api/v1/me/plan-and-progress/` with backend activation status values for subscription, compliance, profile, number, campaign, SMS/RCS, and WhatsApp.
 - [x] Add dashboard-ready messages:
@@ -140,6 +140,7 @@ STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT
 Messaging activation in progress, usually 1-3 business days.
 Messaging active.
 Messaging activation needs attention.
+Messaging activation is in progress. Number assignment may take additional time if local inventory is unavailable.
 ```
 
 - [x] Add tests for plan/progress status transitions.

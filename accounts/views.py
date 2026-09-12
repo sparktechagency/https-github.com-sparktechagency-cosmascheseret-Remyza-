@@ -425,21 +425,41 @@ class CurrentUserPlanAndProgressAPIView(APIView):
         )
         return profile
 
+    def get_number_assignment_status(self):
+        profile = self.sentdm_profile
+        campaign = self.sentdm_campaign
+        if profile and profile.phone_number:
+            return "assigned"
+        if (profile and profile.status == "failed") or (campaign and campaign.status == "FAILED"):
+            return "needs_attention"
+        return "pending"
+
+    def get_number_assignment_message(self, status_value):
+        if status_value == "assigned":
+            return "Messaging number assigned."
+        if status_value == "needs_attention":
+            return "Messaging activation needs attention. Number assignment could not be completed automatically."
+        return "Messaging activation is in progress. Number assignment may take additional time if local inventory is unavailable."
+
     def process_sentdm_number(self):
         phone_number = self.sentdm_profile.phone_number if self.sentdm_profile else ""
         number_assigned = bool(phone_number)
+        number_assignment_status = self.get_number_assignment_status()
+        number_assignment_message = self.get_number_assignment_message(number_assignment_status)
+        self.response["number_assignment_status"] = number_assignment_status
         self.response["sentdm_number"] = {
             "assigned": number_assigned,
             "phone_number": phone_number or None,
-            "status": "assigned" if number_assigned else "pending",
-            "message": "Messaging number assigned." if number_assigned else "Messaging number is not assigned yet.",
+            "status": number_assignment_status,
+            "number_assignment_status": number_assignment_status,
+            "message": number_assignment_message,
         }
         self.add_progress(
             "Sent.dm Number Assigned",
             number_assigned,
             "A dedicated SMS/RCS number is assigned by Sent.dm after Sender Profile processing.",
             key="sentdm_number",
-            status_value="assigned" if number_assigned else "pending",
+            status_value=number_assignment_status,
         )
         return number_assigned
 
@@ -505,6 +525,7 @@ class CurrentUserPlanAndProgressAPIView(APIView):
         profile = self.sentdm_profile
         campaign = self.sentdm_campaign
         number_assigned = bool(profile and profile.phone_number)
+        number_assignment_status = self.response.get("number_assignment_status") or self.get_number_assignment_status()
         campaign_status = campaign.status if campaign else ""
         profile_status = profile.status if profile else ""
 
@@ -542,6 +563,7 @@ class CurrentUserPlanAndProgressAPIView(APIView):
             "message": message,
             "sms_rcs": {
                 "number_assigned": number_assigned,
+                "number_assignment_status": number_assignment_status,
                 "phone_number": profile.phone_number if profile and profile.phone_number else None,
                 "profile_status": profile_status or None,
                 "campaign_status": campaign_status or None,
@@ -564,8 +586,8 @@ class CurrentUserPlanAndProgressAPIView(APIView):
         self.process_organization(user)
         self.process_compliance()
         self.process_sentdm_profile()
-        self.process_sentdm_number()
         self.process_sentdm_campaign()
+        self.process_sentdm_number()
         self.process_activation_status(subscription)
         self.finalize_progress()
 
