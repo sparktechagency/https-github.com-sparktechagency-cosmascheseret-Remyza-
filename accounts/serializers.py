@@ -143,3 +143,4 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "is_phone_verified",
             "last_activity_at",
         )
+        read_only_fields = ("id", "phone_number", "user_type", "is_phone_verified", "last_activity_at")

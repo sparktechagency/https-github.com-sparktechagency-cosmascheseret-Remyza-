@@ -10,7 +10,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from accounts.choices import OTPPurpose
 from accounts.models import OTPVerification, User
-from accounts.views import ClientSignupAPIView, ClientVerifyOTPAPIView, CurrentUserPlanAndProgressAPIView
+from accounts.views import ClientSignupAPIView, ClientVerifyOTPAPIView, CurrentUserAPIView, CurrentUserPlanAndProgressAPIView
 from business.models import Organization
 from subscription.models import UserSubscription
 from sentdm.choices import SentDMCampaignStatus, SentDMProfileStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
@@ -105,6 +105,53 @@ class ClientSignupAPIViewTests(TestCase):
         self.assertEqual(response.data["data"]["user"]["city"], "Austin")
         self.assertEqual(response.data["data"]["user"]["country"], "United States")
         self.assertEqual(response.data["data"]["user"]["country_code"], "+1")
+
+class CurrentUserAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = User.objects.create(
+            phone_number="+15551112222",
+            email="original@example.com",
+            full_name="Original Name",
+            city="Austin",
+            country="United States",
+            country_code="+1",
+            is_phone_verified=True,
+        )
+
+    def test_patch_keeps_identity_and_system_fields_read_only(self):
+        original_last_activity_at = self.user.last_activity_at
+        request = self.factory.patch(
+            "/api/v1/me/",
+            {
+                "phone_number": "+15559999999",
+                "user_type": "ADMIN",
+                "is_phone_verified": False,
+                "last_activity_at": "2026-09-12T03:57:26.545Z",
+                "email": "updated@example.com",
+                "full_name": "Updated Name",
+                "city": "Dallas",
+                "country": "United States",
+                "country_code": "+1",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = CurrentUserAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "+15551112222")
+        self.assertEqual(self.user.user_type, "CLIENT")
+        self.assertTrue(self.user.is_phone_verified)
+        self.assertEqual(self.user.last_activity_at, original_last_activity_at)
+        self.assertEqual(self.user.email, "updated@example.com")
+        self.assertEqual(self.user.full_name, "Updated Name")
+        self.assertEqual(self.user.city, "Dallas")
+        self.assertEqual(response.data["data"]["phone_number"], "+15551112222")
+        self.assertEqual(response.data["data"]["user_type"], "CLIENT")
+        self.assertTrue(response.data["data"]["is_phone_verified"])
 class CurrentUserPlanAndProgressAPIViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()

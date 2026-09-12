@@ -525,3 +525,14 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+
+## 2026-09-12 - Current User Patch Read-Only Fields
+
+- Updated `CurrentUserSerializer` so `PATCH /api/v1/me/` cannot change identity/system fields: `id`, `phone_number`, `user_type`, `is_phone_verified`, and `last_activity_at`.
+- Editable profile fields remain updateable through the same endpoint: `email`, `full_name`, `city`, `country`, `country_code`, and `profile_picture`.
+- Added regression coverage proving a PATCH request cannot overwrite phone number, role, phone verification status, or last activity while still updating editable fields.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts` (9 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (59 tests)
+  - `.venv\Scripts\python.exe manage.py check`

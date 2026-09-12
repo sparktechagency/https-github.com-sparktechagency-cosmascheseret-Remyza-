@@ -66,6 +66,7 @@ Important interpretation:
 - Signup creates or updates an unverified client user and sends a registration OTP. It rejects already verified phone numbers so users do not accidentally re-register.
 - Login still uses `POST /api/v1/client/auth/send-otp/` and `POST /api/v1/client/auth/verify-otp/` for existing OTP auth compatibility.
 - OTP verification returns JWT access/refresh tokens and the user profile including email, city, country, and country code.
+- `PATCH /api/v1/me/` allows editable profile fields such as email, full name, city, country, country code, and profile picture, but keeps phone number, user type, phone verification status, and last activity read-only.
 ## CURRENT VERIFICATION BASELINE
 
 Last known local checks:
