@@ -30,7 +30,8 @@ INSTALLED_APPS = [
     'drf_spectacular',
     
     # custom app-----
-    'accounts', 'ai', 'business', 'common', 'communications', 'core', 'crm', 'subscription', 'twilio_app', 'sentdm'
+    'accounts', 'ai', 'business', 'common', 'communications', 'core', 'crm', 'subscription', 'twilio_app', 'sentdm',
+    'notifications'
 ]
 
 
