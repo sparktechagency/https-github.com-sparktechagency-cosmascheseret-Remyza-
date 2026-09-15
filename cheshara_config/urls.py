@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.templatetags import static
 from django.urls import path, include
-from django_extensions import settings
+from django.conf import settings
+from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 urlpatterns = [
