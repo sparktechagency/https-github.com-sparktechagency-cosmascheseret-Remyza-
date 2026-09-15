@@ -572,3 +572,17 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+
+## 2026-09-15 - Current User Chesera Number Endpoint
+
+- Added `GET /api/v1/me/chesera-number/` for the frontend/mobile app to show the authenticated user's dedicated Chesera SMS/RCS number.
+- The endpoint returns `assigned=false` and the existing local-inventory/pending activation message when no Sent.dm number has been assigned yet.
+- The endpoint returns the assigned Sent.dm phone number, profile id/status, provider, and `sms_rcs_active` when a number exists.
+- Added response serializer for Swagger under `User Chesera Number`.
+- Added regression tests for pending and assigned-number states.
+- Verification passed:
+  - `.venv\Scripts\python.exe manage.py test accounts` (11 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (65 tests)
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`

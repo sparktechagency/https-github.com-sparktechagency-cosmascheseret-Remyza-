@@ -142,3 +142,13 @@ Updated on 2026-09-15 after product clarification:
 - `/api/v1/leads/stats/` returns lead counts for total/hot/warm/cold/opted-out.
 - Sent.dm inbound auto-capture creates or reuses a Contact, creates or reuses a Lead, and links them together.
 - Lead detail includes activity timeline, conversation messages, score percentage, days in pipeline, source, response rate, and message counts.
+
+## CURRENT USER CHESERA NUMBER ENDPOINT
+
+As of 2026-09-15, the mobile/frontend app can fetch the authenticated user's dedicated Chesera SMS/RCS number from:
+
+```text
+GET /api/v1/me/chesera-number/
+```
+
+The endpoint does not require an active paid subscription because free/pending users still need a clear UI state. It returns `assigned=false` until a Sent.dm Sender Profile has a `phone_number`. The response includes the number assignment status, provider, profile id/status, and SMS/RCS active boolean.

@@ -10,7 +10,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from accounts.choices import OTPPurpose
 from accounts.models import OTPVerification, User
-from accounts.views import ClientSignupAPIView, ClientVerifyOTPAPIView, CurrentUserAPIView, CurrentUserPlanAndProgressAPIView
+from accounts.views import ClientSignupAPIView, ClientVerifyOTPAPIView, CurrentUserAPIView, CurrentUserCheseraNumberAPIView, CurrentUserPlanAndProgressAPIView
 from business.models import Organization
 from subscription.models import UserSubscription
 from sentdm.choices import SentDMCampaignStatus, SentDMProfileStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
@@ -152,6 +152,49 @@ class CurrentUserAPIViewTests(TestCase):
         self.assertEqual(response.data["data"]["phone_number"], "+15551112222")
         self.assertEqual(response.data["data"]["user_type"], "CLIENT")
         self.assertTrue(response.data["data"]["is_phone_verified"])
+
+class CurrentUserCheseraNumberAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = User.objects.create(phone_number="+15556660001", email="number@example.com")
+        self.organization = Organization.objects.create(owner=self.user, name="Number Realty")
+
+    def call_endpoint(self):
+        request = self.factory.get("/api/v1/me/chesera-number/")
+        force_authenticate(request, user=self.user)
+        return CurrentUserCheseraNumberAPIView.as_view()(request)
+
+    def test_returns_pending_when_no_chesera_number_is_assigned(self):
+        response = self.call_endpoint()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["success"])
+        self.assertFalse(response.data["data"]["assigned"])
+        self.assertIsNone(response.data["data"]["phone_number"])
+        self.assertEqual(response.data["data"]["number_assignment_status"], "pending")
+        self.assertEqual(response.data["data"]["provider"], "sentdm")
+        self.assertFalse(response.data["data"]["sms_rcs_active"])
+
+    def test_returns_assigned_chesera_number_from_sentdm_profile(self):
+        SentDMProfile.objects.create(
+            user=self.user,
+            organization=self.organization,
+            profile_id="profile_number_assigned",
+            name="Number Sender",
+            status=SentDMProfileStatus.APPROVED,
+            phone_number="+15559990000",
+        )
+
+        response = self.call_endpoint()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["data"]["assigned"])
+        self.assertEqual(response.data["data"]["phone_number"], "+15559990000")
+        self.assertEqual(response.data["data"]["number_assignment_status"], "assigned")
+        self.assertEqual(response.data["data"]["profile_id"], "profile_number_assigned")
+        self.assertEqual(response.data["data"]["profile_status"], SentDMProfileStatus.APPROVED)
+        self.assertTrue(response.data["data"]["sms_rcs_active"])
+
 class CurrentUserPlanAndProgressAPIViewTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()

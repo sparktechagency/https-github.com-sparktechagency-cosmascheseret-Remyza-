@@ -12,6 +12,7 @@ from rest_framework_simplejwt.views import (
 )
 from .choices import OTPPurpose, UserType
 from .models import OTPVerification, User
+from sentdm.models import SentDMProfile
 
 from business.serializers import OrganizationSerializer, ProviderAccountSerializer
 from business.models import PhoneNumber
@@ -21,6 +22,7 @@ from .serializers import (
     ClientSendOTPSerializer,
     ClientVerifyOTPSerializer,
     CurrentUserSerializer,
+    CurrentUserCheseraNumberSerializer,
 )
 from django.db import transaction
 
@@ -344,6 +346,53 @@ class ClaimFreeTrailNumber(APIView):
                 "data": UserFreeTrailNumberSerializer(user_trail_number).data
             }
         )
+
+
+class CurrentUserCheseraNumberAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_profile(self, user):
+        if hasattr(user, "organization"):
+            profile = SentDMProfile.objects.filter(organization=user.organization).first()
+            if profile:
+                return profile
+        return SentDMProfile.objects.filter(user=user).first()
+
+    def get_number_assignment_status(self, profile):
+        if profile and profile.phone_number:
+            return "assigned"
+        if profile and profile.status == "failed":
+            return "needs_attention"
+        return "pending"
+
+    def get_number_assignment_message(self, status_value):
+        if status_value == "assigned":
+            return "Messaging number assigned."
+        if status_value == "needs_attention":
+            return "Messaging activation needs attention. Number assignment could not be completed automatically."
+        return "Messaging activation is in progress. Number assignment may take additional time if local inventory is unavailable."
+
+    @extend_schema(
+        tags=["User Chesera Number"],
+        summary="Get user's Chesera number",
+        description="Returns the authenticated user's dedicated Chesera SMS/RCS number assigned through Sent.dm. Free or pending users receive `assigned=false` with the current activation message.",
+        responses={200: CurrentUserCheseraNumberSerializer},
+    )
+    def get(self, request):
+        profile = self.get_profile(request.user)
+        number_assignment_status = self.get_number_assignment_status(profile)
+        data = {
+            "assigned": bool(profile and profile.phone_number),
+            "phone_number": profile.phone_number if profile and profile.phone_number else None,
+            "status": number_assignment_status,
+            "number_assignment_status": number_assignment_status,
+            "message": self.get_number_assignment_message(number_assignment_status),
+            "provider": "sentdm",
+            "profile_id": profile.profile_id if profile else None,
+            "profile_status": profile.status if profile else None,
+            "sms_rcs_active": bool(profile and profile.phone_number and profile.status in ("approved", "active")),
+        }
+        return Response({"success": True, "data": data}, status=status.HTTP_200_OK)
 
 class CurrentUserPlanAndProgressAPIView(APIView):
     permission_classes = [IsAuthenticated]

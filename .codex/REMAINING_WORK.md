@@ -232,3 +232,12 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [ ] Frontend/mobile: wire Leads tab to paginated `/api/v1/leads/`.
 - [ ] Frontend/mobile: wire hot/warm/cold counts from `/api/v1/leads/stats/`.
 - [ ] Frontend/mobile: wire lead detail conversation/activity/metrics.
+
+## 16. USER CHESERA NUMBER DISPLAY
+
+- [x] Backend: add `GET /api/v1/me/chesera-number/`.
+- [x] Backend: return pending/unassigned state for free or not-yet-activated users.
+- [x] Backend: return assigned Sent.dm SMS/RCS number when available.
+- [x] Backend: document endpoint in Swagger.
+- [ ] Frontend/mobile: show assigned Chesera number in the user's dashboard/profile.
+- [ ] Frontend/mobile: show pending activation message when no number is assigned.

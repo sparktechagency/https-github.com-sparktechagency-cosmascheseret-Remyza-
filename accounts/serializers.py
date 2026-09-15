@@ -144,3 +144,15 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "last_activity_at",
         )
         read_only_fields = ("id", "phone_number", "user_type", "is_phone_verified", "last_activity_at")
+
+
+class CurrentUserCheseraNumberSerializer(serializers.Serializer):
+    assigned = serializers.BooleanField()
+    phone_number = serializers.CharField(allow_null=True)
+    status = serializers.CharField()
+    number_assignment_status = serializers.CharField()
+    message = serializers.CharField()
+    provider = serializers.CharField()
+    profile_id = serializers.CharField(allow_null=True)
+    profile_status = serializers.CharField(allow_null=True)
+    sms_rcs_active = serializers.BooleanField()

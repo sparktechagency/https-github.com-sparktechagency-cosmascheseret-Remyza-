@@ -5,6 +5,7 @@ from .views import (
     ClientVerifyOTPAPIView,
     AdminLoginAPIView,
     CurrentUserPlanAndProgressAPIView,
+    CurrentUserCheseraNumberAPIView,
     CustomTokenRefreshView,
     CustomTokenVerifyView,
 
@@ -25,4 +26,5 @@ urlpatterns = [
     # Twilio-backed free-trial number claim is hidden from Swagger during Sent.dm migration.
     # path("me/claim-free-trail-number/", ClaimFreeTrailNumber.as_view(), name="claim-user-free-trail"),
     path("me/plan-and-progress/", CurrentUserPlanAndProgressAPIView.as_view(), name="user-plan-and-progress"),
+    path("me/chesera-number/", CurrentUserCheseraNumberAPIView.as_view(), name="user-chesera-number"),
 ]
