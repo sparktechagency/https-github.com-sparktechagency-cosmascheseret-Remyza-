@@ -241,3 +241,24 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Backend: document endpoint in Swagger.
 - [ ] Frontend/mobile: show assigned Chesera number in the user's dashboard/profile.
 - [ ] Frontend/mobile: show pending activation message when no number is assigned.
+
+## 17. WELCOME MESSAGE AND STATELESS AI HELPER
+
+- [x] Backend: add business setting `auto_welcome_message_enabled`.
+- [x] Backend: add welcome message set/read endpoint.
+- [x] Backend: queue welcome message task when contacts are manually created.
+- [x] Backend: queue welcome message task when contacts are CSV imported.
+- [x] Backend: keep Contacts as Contacts; welcome messages do not create Leads.
+- [x] Backend: add stateless `tone` + `msg` AI message structuring endpoint.
+- [ ] Frontend/mobile: add welcome message editor.
+- [ ] Frontend/mobile: add profile setting toggle for automatic welcome messages.
+- [ ] Frontend/mobile: call stateless AI structuring endpoint where users compose/edit messages.
+
+## 18. WELCOME MESSAGE COMPLIANCE DECISION
+
+- [x] Keep welcome-message implementation code present for reference.
+- [x] Hide/comment out welcome-message template URL from frontend access.
+- [x] Disable automatic welcome-message queueing from contact creation/import.
+- [x] Disable Sent.dm welcome-message Celery task/send flow.
+- [x] Keep stateless AI message structuring endpoint active.
+- [ ] Future product decision: only re-enable welcome/first-touch messages with controlled provider-approved templates and explicit consent rules.

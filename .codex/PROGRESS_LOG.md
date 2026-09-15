@@ -586,3 +586,36 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+
+## 2026-09-15 - Welcome Message Automation and Stateless AI Message Structuring
+
+- Added `auto_welcome_message_enabled` to `BusinessSetting` and exposed it through `UpdateBusinessSettingSerializer`.
+- Added migration `business/migrations/0034_businesssetting_auto_welcome_message_enabled.py`.
+- Added `PUT/PATCH/GET /api/v1/message-templates/welcome/` for setting and reading the user's welcome message.
+- Reused `StaticMessageTemplate` with `template_type=WELCOME` instead of creating a duplicate welcome-message table.
+- Added Celery task `send_contact_welcome_message_task(contact_id)`.
+- Contact creation and CSV import now queue the welcome task when the business setting is enabled.
+- Welcome messages do not promote Contacts into Leads; Leads are still created only when the person engages/replies through the inbound messaging flow.
+- Added stateless AI endpoint `POST /api/v1/ai/messages/structure/` accepting `tone` and `msg`, returning `structured_msg` without saving data.
+- Added regression coverage for business setting toggle, welcome template upsert, welcome queueing, and AI message structuring.
+- Verification passed:
+  - `.venv\Scripts\python.exe manage.py test ai business communications crm` (14 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (71 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+
+## 2026-09-15 - Disabled Automatic Welcome Message Sending
+
+- Kept the welcome-message code for future reference, but disabled the runtime flow for compliance safety.
+- Confirmed `communications/urls.py` keeps `/api/v1/message-templates/welcome/` commented out.
+- Changed contact creation/CSV import welcome hook into a no-op, preserving the old queue logic as comments.
+- Commented out the Sent.dm Celery welcome task and added an early disabled return to the welcome send service.
+- Updated tests so the hidden welcome endpoint returns 404 and contact creation does not queue/send welcome messages even when the setting is enabled.
+- Kept the stateless AI endpoint active: `POST /api/v1/ai/messages/structure/`.
+- Verification passed:
+  - `.venv\Scripts\python.exe manage.py test ai business communications crm sentdm` (52 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (71 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`

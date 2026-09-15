@@ -152,3 +152,27 @@ GET /api/v1/me/chesera-number/
 ```
 
 The endpoint does not require an active paid subscription because free/pending users still need a clear UI state. It returns `assigned=false` until a Sent.dm Sender Profile has a `phone_number`. The response includes the number assignment status, provider, profile id/status, and SMS/RCS active boolean.
+
+## CURRENT WELCOME MESSAGE AND STATELESS AI MESSAGE ENDPOINTS
+
+As of 2026-09-15:
+
+- Users can configure a welcome message through `PUT/PATCH /api/v1/message-templates/welcome/`.
+- Welcome text is stored in the existing `communications.StaticMessageTemplate` table using `template_type=WELCOME`.
+- Business settings now include `auto_welcome_message_enabled`.
+- When `auto_welcome_message_enabled=true`, manually created contacts and CSV-imported contacts queue a Celery task to send the configured welcome message.
+- Welcome sending does not create a Lead. The contact becomes a Lead only when they reply/message into Chesera and the inbound Sent.dm webhook auto-captures them.
+- Welcome send status is recorded under `Contact.metadata["welcome_message"]` when the task runs.
+- The stateless AI helper endpoint is `POST /api/v1/ai/messages/structure/`; it accepts `tone` and `msg`, returns `structured_msg`, and does not read or write database records beyond authentication.
+
+## WELCOME MESSAGE FLOW DISABLED
+
+Updated on 2026-09-15 after compliance review:
+
+- Automatic welcome-message sending is intentionally disabled.
+- `communications/urls.py` keeps the welcome template URL commented out, so frontend/mobile cannot configure dynamic welcome messages.
+- `crm.views.enqueue_contact_welcome_message()` is a no-op and preserves the previous queueing code only as commented reference.
+- `sentdm.tasks.send_contact_welcome_message_task` is commented out.
+- `sentdm.services.send_welcome_message_to_contact()` has an early disabled return and preserves the previous implementation only as unreachable reference.
+- This avoids dynamic first-touch message risk across SMS/10DLC and WhatsApp.
+- `POST /api/v1/ai/messages/structure/` remains active and should still be used for stateless message drafting.

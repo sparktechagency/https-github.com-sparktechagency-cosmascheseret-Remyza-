@@ -1,7 +1,7 @@
 import csv
 import io
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import mixins, status, viewsets
@@ -55,6 +55,23 @@ def get_contact_value(row, *keys):
         if value is not None and str(value).strip():
             return str(value).strip()
     return ""
+
+
+
+
+def enqueue_contact_welcome_message(contact):
+    # Automatic welcome-message sending is intentionally disabled.
+    # Keeping the previous implementation below as reference only because fully dynamic/automatic
+    # first-touch messages can create SMS/10DLC and WhatsApp compliance risk.
+    return
+    # settings_obj = getattr(contact.organization, "settings", None)
+    # if not settings_obj or not getattr(settings_obj, "auto_welcome_message_enabled", False):
+    #     return
+    # try:
+    #     from sentdm.tasks import send_contact_welcome_message_task
+    #     transaction.on_commit(lambda: send_contact_welcome_message_task.delay(contact.id))
+    # except Exception:
+    #     return
 
 
 def create_activity(lead, activity_type, title, description="", metadata=None):
@@ -125,7 +142,8 @@ class ContactViewSet(OrganizationScopedMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         organization = self.get_organization_or_raise()
         try:
-            serializer.save(organization=organization, source=LeadSource.MANUAL)
+            contact = serializer.save(organization=organization, source=LeadSource.MANUAL)
+            enqueue_contact_welcome_message(contact)
         except IntegrityError:
             raise ValidationError({"phone_number": "This contact already exists."})
 
@@ -206,6 +224,7 @@ class ContactViewSet(OrganizationScopedMixin, viewsets.ModelViewSet):
                     source=LeadSource.CSV_UPLOAD,
                 )
                 created.append({"id": contact.id, "full_name": contact.full_name, "contact_number": contact.contact_number})
+                enqueue_contact_welcome_message(contact)
             except IntegrityError:
                 duplicates.append({**duplicate_payload, "reason": "Contact already exists."})
 

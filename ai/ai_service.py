@@ -96,6 +96,46 @@ Return only a valid JSON object using this exact shape:
                 "stage": "HOT",
             }
 
+
+    def generate_structured_message(self, *, tone, msg) -> dict:
+        tone = str(tone or "professional").strip().lower()
+        source_message = str(msg or "").strip()
+        if not source_message:
+            return {"structured_msg": "", "tone": tone}
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You rewrite short business messages for Chesera users. "
+                    "Return only JSON with key structured_msg. Keep the original meaning, make the message clear, natural, compliant, and concise. "
+                    "Do not add unsupported promises, urgency pressure, excessive punctuation, ALL CAPS, or shortened links."
+                ),
+            },
+            {"role": "user", "content": f"Tone: {tone}\nMessage: {source_message}"},
+        ]
+        try:
+            if openai is None:
+                raise RuntimeError("OpenAI SDK is not installed.")
+            response = openai.ChatCompletion.create(
+                model=getattr(settings, "OPENAI_STRUCTURED_MESSAGE_MODEL", "gpt-4o"),
+                messages=messages,
+                temperature=0.35,
+                max_tokens=300,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            parsed = json.loads(content)
+            structured_msg = str(parsed.get("structured_msg", "")).strip()
+            if structured_msg:
+                return {"structured_msg": structured_msg, "tone": tone}
+        except Exception:
+            pass
+
+        cleaned = " ".join(source_message.split())
+        if cleaned and cleaned[-1] not in ".!?":
+            cleaned += "."
+        return {"structured_msg": cleaned, "tone": tone}
     def _org_value(self, organization, field_name, default=""):
         if not organization:
             return default

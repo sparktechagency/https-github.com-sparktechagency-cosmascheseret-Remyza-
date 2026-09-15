@@ -16,7 +16,8 @@ from rest_framework.exceptions import ValidationError
 from ai.ai_service import AIService
 from business.models import PhoneNumber, PhoneNumberStatus
 from communications.choices import ConversationStatus, MessageDirection, MessageStatus
-from communications.models import Conversation, Message
+from communications.choices import MessageTemplateType
+from communications.models import Conversation, Message, StaticMessageTemplate
 from crm.choices import LeadActivityType, LeadSource, LeadStage
 from crm.models import Contact, FollowUpReminder, Lead, LeadActivity
 
@@ -1154,3 +1155,76 @@ def create_webhook_event(request, *, allow_unverified_in_debug=False):
         headers={key: value for key, value in request.headers.items()},
     )
     return event, True
+
+
+def get_active_welcome_template(user, organization):
+    return StaticMessageTemplate.objects.filter(
+        user=user,
+        organization=organization,
+        template_type=MessageTemplateType.WELCOME,
+        is_active=True,
+    ).first()
+
+
+def render_contact_template(template_text, contact, organization):
+    business_name = getattr(organization, "name", "") or "Chesera"
+    full_name = contact.full_name or "there"
+    return (
+        str(template_text or "")
+        .replace("[Name]", full_name)
+        .replace("[name]", full_name)
+        .replace("[Business]", business_name)
+        .replace("[business]", business_name)
+        .replace("[Agent Business]", business_name)
+    ).strip()
+
+
+def send_welcome_message_to_contact(contact_id):
+    contact = Contact.objects.select_related("organization", "organization__owner").filter(pk=contact_id).first()
+    if not contact:
+        return {"sent": False, "reason": "contact_not_found"}
+
+    organization = contact.organization
+    user = organization.owner
+    settings_obj = getattr(organization, "settings", None)
+    if not settings_obj or not getattr(settings_obj, "auto_welcome_message_enabled", False):
+        return {"sent": False, "reason": "auto_welcome_disabled"}
+
+    template = get_active_welcome_template(user, organization)
+    if not template or not template.message.strip():
+        return {"sent": False, "reason": "welcome_template_missing"}
+
+    profile = getattr(organization, "sentdm_profile", None) or SentDMProfile.objects.filter(organization=organization).first()
+    if not profile or not profile.phone_number:
+        return {"sent": False, "reason": "chesera_number_not_assigned"}
+
+    text = render_contact_template(template.message, contact, organization)
+    if not text:
+        return {"sent": False, "reason": "welcome_template_empty"}
+
+    try:
+        message, response = send_sentdm_message(
+            user=user,
+            to=contact.contact_number,
+            text=text,
+            profile=profile,
+            channel=SentDMChannel.SMS,
+            idempotency_prefix=f"welcome-contact-{contact.id}",
+            purpose="welcome",
+        )
+    except Exception as exc:
+        metadata = dict(contact.metadata or {})
+        metadata["welcome_message"] = {"status": "failed", "error": str(exc), "updated_at": timezone.now().isoformat()}
+        contact.metadata = metadata
+        contact.save(update_fields=["metadata", "updated_at"])
+        return {"sent": False, "reason": "send_failed", "error": str(exc)}
+
+    metadata = dict(contact.metadata or {})
+    metadata["welcome_message"] = {
+        "status": message.status,
+        "sentdm_message_id": message.sent_message_id,
+        "sent_at": timezone.now().isoformat(),
+    }
+    contact.metadata = metadata
+    contact.save(update_fields=["metadata", "updated_at"])
+    return {"sent": True, "message_id": message.sent_message_id, "status": message.status}

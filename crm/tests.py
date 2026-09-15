@@ -3,7 +3,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from business.models import Organization
+from business.models import BusinessSetting, Organization
 from communications.choices import ConversationStatus, MessageDirection, MessageStatus
 from communications.models import Conversation, Message
 from crm.choices import LeadActivityType, LeadSource, LeadStage
@@ -48,6 +48,30 @@ class CRMContactAndLeadAPITests(TestCase):
         self.assertEqual(contact.source, LeadSource.MANUAL)
         self.assertFalse(Lead.objects.filter(contact_number="+15551112222").exists())
         self.assertFalse(response.json()["is_lead"])
+    def test_manual_contact_create_does_not_queue_welcome_even_when_setting_enabled(self):
+        BusinessSetting.objects.create(
+            user=self.user,
+            organization=self.organization,
+            auto_welcome_message_enabled=True,
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/v1/contacts/",
+                {
+                    "full_name": "Welcome Contact",
+                    "country_code": "+1",
+                    "phone_number": "5557778888",
+                    "email": "welcome-contact@example.com",
+                    "business_name": "Welcome Co",
+                    "notes": "Do not auto-send welcome.",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        contact = Contact.objects.get(contact_number="+15557778888")
+        self.assertNotIn("welcome_message", contact.metadata or {})
 
     def test_csv_upload_creates_contacts_and_returns_duplicates(self):
         Contact.objects.create(
