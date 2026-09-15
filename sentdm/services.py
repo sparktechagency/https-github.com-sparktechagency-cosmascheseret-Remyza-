@@ -767,6 +767,8 @@ def get_or_create_lead_and_conversation(profile, details):
             description="Contact was auto-captured from an inbound message.",
             metadata={"source": LeadSource.AUTO_CAPTURE, "channel": details.get("channel", "auto")},
         )
+        from notifications.services import NotificationTemplates, safe_notify
+        safe_notify(NotificationTemplates.new_lead_captured, lead, details.get("channel", "auto"))
     lead.last_message_at = now
     lead.last_incoming_at = now
     lead_update_fields = ["last_message_at", "last_incoming_at", "updated_at"]

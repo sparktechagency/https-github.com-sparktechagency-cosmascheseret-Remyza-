@@ -25,6 +25,7 @@ from .serializers import (
     CurrentUserCheseraNumberSerializer,
 )
 from django.db import transaction
+from notifications.services import NotificationTemplates, safe_notify
 
 
 
@@ -52,6 +53,10 @@ class ClientSignupAPIView(APIView):
             phone_number=phone,
             purpose=OTPPurpose.REGISTER,
         )
+
+        if created:
+            transaction.on_commit(lambda: safe_notify(NotificationTemplates.welcome_user, user))
+            transaction.on_commit(lambda: safe_notify(NotificationTemplates.new_user_registered, user))
 
         return Response(
             {

@@ -7,6 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from notifications.services import NotificationTemplates, safe_notify
 from .client import SentDMClient, SentDMClientError
 from .models import SentDMProfile
 from .permissions import HasActivePaidSubscription
@@ -136,6 +137,8 @@ class SentDMProfileCreateAPIView(APIView):
 
         try:
             profile, response = create_profile_for_user(request.user, serializer.validated_data)
+            if profile:
+                safe_notify(NotificationTemplates.sentdm_profile_requested, profile)
             return Response(
                 {
                     "success": True,
@@ -208,6 +211,7 @@ class SentDMWhatsAppConnectAPIView(APIView):
                 serializer.validated_data,
                 profile_id=serializer.validated_data.get("profile_id") or None,
             )
+            safe_notify(NotificationTemplates.whatsapp_connection_requested, profile)
             return Response(
                 {
                     "success": True,
@@ -258,6 +262,7 @@ class SentDMProfileCompleteAPIView(APIView):
 
         try:
             response = complete_profile(profile, request)
+            safe_notify(NotificationTemplates.sentdm_profile_completed, profile)
             return Response(
                 {
                     "success": True,
@@ -322,6 +327,9 @@ class SentDMCampaignCreateAPIView(APIView):
                         "messages": readiness["messages"],
                     }
                 )
+
+            if campaign:
+                safe_notify(NotificationTemplates.sentdm_campaign_requested, campaign)
 
             return Response(
                 {

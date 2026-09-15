@@ -269,3 +269,17 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Disable Sent.dm welcome-message Celery task/send flow.
 - [x] Keep stateless AI message structuring endpoint active.
 - [ ] Future product decision: only re-enable welcome/first-touch messages with controlled provider-approved templates and explicit consent rules.
+## 19. NOTIFICATIONS
+
+- [x] Add app-level notification model/service/templates for Chesera.
+- [x] Add REST notification API at `/api/v1/notifications/`.
+- [x] Add read state actions: mark one read, mark all read, unread count, clear read.
+- [x] Enforce normal users as REST-only notification recipients.
+- [x] Add admin-only websocket notification consumer at `/ws/admin/notifications/?token=<jwt>`.
+- [x] Configure Channels/Redis and ASGI/Daphne runtime support.
+- [x] Add Nginx `/ws/` websocket proxy block with Upgrade headers.
+- [x] Wire notification hooks into signup, subscription records, Sent.dm profile/campaign/WhatsApp actions, and inbound new-lead capture.
+- [x] Add cleanup Celery task for old read notifications.
+- [ ] Frontend/mobile: wire notification list, unread count, and read actions.
+- [ ] Admin dashboard: wire websocket connection and live notification UI.
+- [ ] Production: after deploy, confirm Daphne websocket handshake through Nginx for `/ws/admin/notifications/`.

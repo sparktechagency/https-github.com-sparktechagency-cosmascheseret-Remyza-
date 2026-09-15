@@ -186,3 +186,15 @@ Updated on 2026-09-15:
 - `GET /api/v1/leads/{id}/` remains a detail endpoint with compact lead detail, activity timeline, metrics, and the existing conversation field for backward compatibility.
 - `GET /api/v1/leads/{id}/conversation/` is the frontend conversation-screen endpoint. It returns the full message history for that lead using normal pagination.
 - `GET /api/v1/leads/inbox/` returns one row per lead that has messages, including lead fields, metrics, unread message count, and the latest message. It does not duplicate leads per message.
+## CURRENT NOTIFICATION SYSTEM
+
+Updated on 2026-09-15:
+
+- `notifications` is now the active app-level notification system for Chesera.
+- REST notifications are available to all authenticated users at `/api/v1/notifications/`.
+- Normal/client users only receive REST/API-based notifications.
+- Admin/staff users receive the same REST notification records plus websocket pushes at `/ws/admin/notifications/?token=<jwt>`.
+- Websocket access is admin-only; non-admin tokens are rejected by the consumer.
+- Notification templates currently cover: welcome/signup, new user admin alert, subscription record/active, Sent.dm Sender Profile request/completion, 10DLC campaign request, WhatsApp connection request, new lead captured, and system alerts.
+- Notification hooks are wired into signup, IAP subscription creation, Sent.dm profile/campaign/WhatsApp actions, and Sent.dm inbound new-lead auto-capture.
+- Production now runs through Daphne/ASGI so HTTP and websocket traffic can share the same backend service. Channels uses Redis through `CHANNEL_REDIS_URL`, defaulting to `CELERY_BROKER_URL`. Nginx config includes a `/ws/` proxy block with Upgrade headers for admin notification websockets.

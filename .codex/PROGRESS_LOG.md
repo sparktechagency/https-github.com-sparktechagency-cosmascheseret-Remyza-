@@ -633,3 +633,22 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+## 2026-09-15 - Notification App Integrated
+
+- Reworked the copied `notifications` app into a Chesera-specific notification system.
+- Added Chesera notification types/templates for signup, subscriptions, Sent.dm activation steps, WhatsApp connection, new lead capture, and system alerts.
+- Added REST notification endpoints under `/api/v1/notifications/` with pagination, filters, detail, mark-read, mark-all-read, unread-count, and clear-read actions.
+- Enforced delivery policy: normal users get REST/API notifications only; admin/staff users get REST records plus websocket push events.
+- Added admin-only websocket endpoint `/ws/admin/notifications/?token=<jwt>` using JWT query auth.
+- Added Channels/Redis settings and switched production startup to Daphne/ASGI so websockets can be served.
+- Updated Nginx config with a `/ws/` proxy block and websocket Upgrade headers.
+- Added notification hooks to signup, subscription creation, Sent.dm Sender Profile creation/completion, 10DLC campaign creation, WhatsApp connection, and inbound new-lead auto-capture.
+- Added `notifications.cleanup_read_notifications` Celery task for old read notification cleanup.
+- Added initial notifications migration and regression tests.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q notifications accounts sentdm subscription cheshara_config`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py test notifications` (5 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm notifications` (78 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`

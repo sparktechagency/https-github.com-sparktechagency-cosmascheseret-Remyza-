@@ -16,12 +16,14 @@ CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "*").split(",")
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     
     # library app-----
     'rest_framework', 'rest_framework_simplejwt',
@@ -31,7 +33,7 @@ INSTALLED_APPS = [
     
     # custom app-----
     'accounts', 'ai', 'business', 'common', 'communications', 'core', 'crm', 'subscription', 'twilio_app', 'sentdm',
-    'notifications'
+    'notifications.apps.NotificationsConfig'
 ]
 
 
@@ -93,7 +95,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'User Account', 'description': 'Current user profile and account management.'},
         {'name': 'User Plan Progress', 'description': 'Current user subscription and onboarding progress.'},
         {'name': 'Business', 'description': 'Business management, automation and reply settings.'},
-        {'name': 'Notifications', 'description': 'User notification preferences.'},
+        {'name': 'Notifications', 'description': 'REST notifications for users and admin websocket-backed notifications.'},
         {'name': 'Sent.dm', 'description': 'Sent.dm sandbox, sender profile, message, and webhook endpoints.'},
         {'name': 'User Subscriptions', 'description': 'Apple/Google in-app subscription records and admin subscription review.'},
         {'name': 'Reference Data', 'description': 'Business type and industry reference data.'},
@@ -147,6 +149,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'cheshara_config.wsgi.application'
+ASGI_APPLICATION = 'cheshara_config.asgi.application'
 
 
 # Database
@@ -269,3 +272,13 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "False").strip().lower() in ("true", "1", "yes")
 CELERY_TASK_EAGER_PROPAGATES = True
 SENTDM_WEBHOOK_ASYNC_ENABLED = os.getenv("SENTDM_WEBHOOK_ASYNC_ENABLED", "True").strip().lower() in ("true", "1", "yes")
+
+# Channels / WebSocket notifications
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [os.getenv("CHANNEL_REDIS_URL", CELERY_BROKER_URL)],
+        },
+    }
+}
