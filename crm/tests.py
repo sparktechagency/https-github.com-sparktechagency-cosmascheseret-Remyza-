@@ -119,6 +119,9 @@ class CRMContactAndLeadAPITests(TestCase):
         self.assertEqual(warm_response.status_code, 200, warm_response.content)
         data = warm_response.json()
         self.assertEqual(data["count"], 2)
+        self.assertEqual(data["hot_count"], 1)
+        self.assertEqual(data["warm_count"], 2)
+        self.assertEqual(data["cold_count"], 2)
         self.assertEqual(len(data["results"]), 1)
         self.assertIn("next", data)
 
@@ -184,3 +187,113 @@ class CRMContactAndLeadAPITests(TestCase):
         self.assertEqual(data["response_rate"], 100)
         self.assertEqual(len(data["conversation"]), 2)
         self.assertEqual(data["activities"][0]["title"], "Lead created")
+
+    def test_lead_conversation_endpoint_returns_paginated_messages(self):
+        lead = Lead.objects.create(
+            organization=self.organization,
+            full_name="Conversation API Lead",
+            contact_number="+15556667777",
+            source=LeadSource.AUTO_CAPTURE,
+        )
+        conversation = Conversation.objects.create(
+            organization=self.organization,
+            lead=lead,
+            status=ConversationStatus.ACTIVE,
+            unread_messages=2,
+        )
+        for index in range(3):
+            Message.objects.create(
+                lead=lead,
+                conversation=conversation,
+                direction=MessageDirection.INBOUND if index == 0 else MessageDirection.OUTBOUND,
+                sender="+15556667777" if index == 0 else "+15550000001",
+                recipient="+15550000001" if index == 0 else "+15556667777",
+                content=f"Message {index + 1}",
+                provider_message_sid=f"conversation-api-{index + 1}",
+                status=MessageStatus.DELIVERED,
+            )
+
+        response = self.client.get(f"/api/v1/leads/{lead.id}/conversation/?page_size=2")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()
+        self.assertEqual(data["count"], 3)
+        self.assertEqual(len(data["results"]), 2)
+        self.assertEqual(data["results"][0]["content"], "Message 1")
+        self.assertEqual(data["results"][0]["conversation"], conversation.id)
+        self.assertIn("next", data)
+
+    def test_lead_inbox_returns_one_row_per_lead_with_latest_message(self):
+        lead_one = Lead.objects.create(
+            organization=self.organization,
+            full_name="Inbox Lead One",
+            contact_number="+15558880001",
+            source=LeadSource.AUTO_CAPTURE,
+            stage=LeadStage.HOT,
+        )
+        lead_two = Lead.objects.create(
+            organization=self.organization,
+            full_name="Inbox Lead Two",
+            contact_number="+15558880002",
+            source=LeadSource.AUTO_CAPTURE,
+            stage=LeadStage.WARM,
+        )
+        Lead.objects.create(
+            organization=self.organization,
+            full_name="No Messages Lead",
+            contact_number="+15558880003",
+            source=LeadSource.MANUAL,
+        )
+        conversation_one = Conversation.objects.create(
+            organization=self.organization,
+            lead=lead_one,
+            status=ConversationStatus.ACTIVE,
+            unread_messages=1,
+        )
+        conversation_two = Conversation.objects.create(
+            organization=self.organization,
+            lead=lead_two,
+            status=ConversationStatus.ACTIVE,
+        )
+        Message.objects.create(
+            lead=lead_one,
+            conversation=conversation_one,
+            direction=MessageDirection.INBOUND,
+            sender="+15558880001",
+            recipient="+15550000001",
+            content="First inbox message",
+            provider_message_sid="inbox-one-first",
+            status=MessageStatus.DELIVERED,
+        )
+        Message.objects.create(
+            lead=lead_one,
+            conversation=conversation_one,
+            direction=MessageDirection.OUTBOUND,
+            sender="+15550000001",
+            recipient="+15558880001",
+            content="Latest inbox message",
+            provider_message_sid="inbox-one-latest",
+            status=MessageStatus.SENT,
+        )
+        Message.objects.create(
+            lead=lead_two,
+            conversation=conversation_two,
+            direction=MessageDirection.INBOUND,
+            sender="+15558880002",
+            recipient="+15550000001",
+            content="Only lead two message",
+            provider_message_sid="inbox-two-only",
+            status=MessageStatus.DELIVERED,
+        )
+
+        response = self.client.get("/api/v1/leads/inbox/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        data = response.json()
+        self.assertEqual(data["count"], 2)
+        results_by_id = {item["id"]: item for item in data["results"]}
+        self.assertEqual(set(results_by_id), {lead_one.id, lead_two.id})
+        self.assertEqual(results_by_id[lead_one.id]["last_message"]["content"], "Latest inbox message")
+        self.assertEqual(results_by_id[lead_one.id]["unread_messages"], 1)
+        self.assertEqual(results_by_id[lead_one.id]["total_messages"], 2)
+        self.assertEqual(results_by_id[lead_two.id]["last_message"]["content"], "Only lead two message")

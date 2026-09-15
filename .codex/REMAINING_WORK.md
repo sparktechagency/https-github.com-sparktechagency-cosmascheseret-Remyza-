@@ -208,8 +208,11 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Add lead source tracking for manual, CSV upload, and auto-capture.
 - [x] Add CSV upload endpoint with duplicate list in the response.
 - [x] Add hot/warm/cold lead counts endpoint.
+- [x] Add hot/warm/cold lead counts directly to the paginated lead list response.
 - [x] Add hot/warm/cold lead list filtering.
 - [x] Add lead detail response with activity timeline and conversation messages.
+- [x] Add paginated lead conversation endpoint at `/api/v1/leads/{id}/conversation/`.
+- [x] Add lead inbox endpoint at `/api/v1/leads/inbox/` with one row per lead and latest message.
 - [x] Add metrics: lead score percentage, days in pipeline, total messages, source, and response rate.
 - [x] Auto-capture inbound Sent.dm texters as contacts.
 - [x] Record key activities: lead created, first reply received, AI welcome/reply sent, and status changed.
@@ -224,14 +227,18 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Backend: separate saved Contacts from pipeline Leads.
 - [x] Backend: manual contact CRUD via `/api/v1/contacts/`.
 - [x] Backend: CSV contact upload via `/api/v1/contacts/upload-csv/` with duplicate rows.
-- [x] Backend: paginated lead list via `/api/v1/leads/?page=1&page_size=20`.
+- [x] Backend: paginated lead list via `/api/v1/leads/?page=1&page_size=20` with `hot_count`, `warm_count`, and `cold_count`.
+- [x] Backend: paginated lead conversation history via `/api/v1/leads/{id}/conversation/`.
+- [x] Backend: inbox list via `/api/v1/leads/inbox/` with latest message per lead.
 - [x] Backend: auto-capture Sent.dm inbound texters as Contact + Lead.
 - [x] Backend: link Contact and Lead records for cross-navigation.
 - [ ] Frontend/mobile: wire separate Contacts tab to `/api/v1/contacts/`.
 - [ ] Frontend/mobile: wire CSV upload duplicate review to `/api/v1/contacts/upload-csv/`.
 - [ ] Frontend/mobile: wire Leads tab to paginated `/api/v1/leads/`.
 - [ ] Frontend/mobile: wire hot/warm/cold counts from `/api/v1/leads/stats/`.
-- [ ] Frontend/mobile: wire lead detail conversation/activity/metrics.
+- [ ] Frontend/mobile: wire lead detail activity/metrics.
+- [ ] Frontend/mobile: wire full paginated lead conversation from `/api/v1/leads/{id}/conversation/`.
+- [ ] Frontend/mobile: wire inbox list from `/api/v1/leads/inbox/`.
 
 ## 16. USER CHESERA NUMBER DISPLAY
 

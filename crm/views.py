@@ -2,7 +2,7 @@ import csv
 import io
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -23,6 +23,9 @@ from .serializers import (
     ContactCSVUploadSerializer,
     ContactSerializer,
     LeadDetailSerializer,
+    LeadInboxSerializer,
+    LeadListResponseSerializer,
+    LeadMessageSerializer,
     LeadSerializer,
     LeadStatsSerializer,
     normalize_contact_number,
@@ -250,6 +253,8 @@ class LeadViewSet(OrganizationScopedMixin, mixins.ListModelMixin, mixins.Retriev
     def get_serializer_class(self):
         if self.action == "retrieve":
             return LeadDetailSerializer
+        if self.action == "inbox":
+            return LeadInboxSerializer
         return LeadSerializer
 
     def get_queryset(self):
@@ -271,11 +276,15 @@ class LeadViewSet(OrganizationScopedMixin, mixins.ListModelMixin, mixins.Retriev
             .order_by("-last_message_at", "-created_at")
         )
 
-        stage = (self.request.query_params.get("stage") or "").strip().lower()
-        if stage in STAGE_GROUPS:
-            queryset = queryset.filter(stage__in=STAGE_GROUPS[stage])
-        elif stage:
-            queryset = queryset.filter(stage=stage)
+        return self.apply_filters(queryset)
+
+    def apply_filters(self, queryset, include_stage=True):
+        if include_stage:
+            stage = (self.request.query_params.get("stage") or "").strip().lower()
+            if stage in STAGE_GROUPS:
+                queryset = queryset.filter(stage__in=STAGE_GROUPS[stage])
+            elif stage:
+                queryset = queryset.filter(stage=stage)
 
         source = (self.request.query_params.get("source") or "").strip().lower()
         if source:
@@ -292,6 +301,17 @@ class LeadViewSet(OrganizationScopedMixin, mixins.ListModelMixin, mixins.Retriev
             )
         return queryset
 
+    def get_stage_counts(self):
+        organization = self.get_organization()
+        if not organization:
+            return {"hot_count": 0, "warm_count": 0, "cold_count": 0}
+        queryset = self.apply_filters(Lead.objects.filter(organization=organization), include_stage=False)
+        return {
+            "hot_count": queryset.filter(stage__in=HOT_STAGE_VALUES).count(),
+            "warm_count": queryset.filter(stage__in=WARM_STAGE_VALUES).count(),
+            "cold_count": queryset.filter(stage__in=COLD_STAGE_VALUES).count(),
+        }
+
     @extend_schema(
         summary="List leads",
         description="Returns paginated pipeline leads. A lead is created when a contact/person engages through messaging or is otherwise promoted into the pipeline.",
@@ -302,10 +322,13 @@ class LeadViewSet(OrganizationScopedMixin, mixins.ListModelMixin, mixins.Retriev
             OpenApiParameter("source", str, required=False, description="Filter by source: auto_capture, sentdm, manual, or csv_upload."),
             OpenApiParameter("search", str, required=False, description="Search by name, phone, email, or business name."),
         ],
-        responses={200: LeadSerializer(many=True)},
+        responses={200: LeadListResponseSerializer},
     )
     def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
+        response = super().list(request, *args, **kwargs)
+        if isinstance(response.data, dict):
+            response.data.update(self.get_stage_counts())
+        return response
 
     @extend_schema(
         summary="Get lead details",
@@ -335,6 +358,61 @@ class LeadViewSet(OrganizationScopedMixin, mixins.ListModelMixin, mixins.Retriev
                 f"Lead status changed from {old_stage} to {lead.stage}.",
                 {"from": old_stage, "to": lead.stage},
             )
+
+    @extend_schema(
+        summary="List lead inbox",
+        description="Returns one row per lead that has conversation messages, including lead details, latest message, unread count, and lead metrics.",
+        parameters=[
+            OpenApiParameter("page", int, required=False, description="Page number."),
+            OpenApiParameter("page_size", int, required=False, description="Items per page, up to 100."),
+            OpenApiParameter("stage", str, required=False, description="Filter by lead stage group: hot, warm, cold, or a stored stage value."),
+            OpenApiParameter("source", str, required=False, description="Filter by source: auto_capture, sentdm, manual, or csv_upload."),
+            OpenApiParameter("search", str, required=False, description="Search by name, phone, email, or business name."),
+        ],
+        responses={200: LeadInboxSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"], url_path="inbox")
+    def inbox(self, request):
+        organization = self.get_organization_or_raise()
+        queryset = (
+            Lead.objects.filter(organization=organization, messages__isnull=False)
+            .select_related("contact")
+            .annotate(
+                message_total=Count("messages", distinct=True),
+                inbound_total=Count("messages", filter=Q(messages__direction=MessageDirection.INBOUND), distinct=True),
+                outbound_total=Count("messages", filter=Q(messages__direction=MessageDirection.OUTBOUND), distinct=True),
+                unread_total=Sum("conversations__unread_messages", distinct=True),
+            )
+            .distinct()
+            .order_by("-last_message_at", "-created_at")
+        )
+        queryset = self.apply_filters(queryset)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = LeadInboxSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = LeadInboxSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="List lead conversation messages",
+        description="Returns the full message history for one lead with pagination. Use this for the conversation screen instead of relying on the compact lead detail response.",
+        parameters=[
+            OpenApiParameter("page", int, required=False, description="Page number."),
+            OpenApiParameter("page_size", int, required=False, description="Items per page, up to 100."),
+        ],
+        responses={200: LeadMessageSerializer(many=True)},
+    )
+    @action(detail=True, methods=["get"], url_path="conversation")
+    def conversation(self, request, pk=None):
+        lead = self.get_object()
+        queryset = lead.messages.select_related("conversation").order_by("created_at")
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = LeadMessageSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = LeadMessageSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     @extend_schema(
         summary="Get lead counts",

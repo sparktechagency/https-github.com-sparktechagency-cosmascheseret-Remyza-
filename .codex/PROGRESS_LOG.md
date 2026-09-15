@@ -619,3 +619,17 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+
+## 2026-09-15 - Lead List Counts, Inbox, and Paginated Conversation API
+
+- Updated `GET /api/v1/leads/` so the paginated response includes `hot_count`, `warm_count`, and `cold_count` alongside `count`, `next`, `previous`, and `results`.
+- Added `GET /api/v1/leads/{id}/conversation/` for full paginated lead message history, keeping `GET /api/v1/leads/{id}/` backward compatible.
+- Added `GET /api/v1/leads/inbox/` for one row per lead with lead details, metrics, unread message count, and the latest message.
+- Added `conversation` id to lead message serializer responses for frontend message grouping/navigation.
+- Added CRM regression tests for lead list counts, paginated conversation retrieval, and inbox latest-message behavior.
+- Verification passed:
+  - `.venv\Scripts\python.exe manage.py test crm` (7 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (73 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`

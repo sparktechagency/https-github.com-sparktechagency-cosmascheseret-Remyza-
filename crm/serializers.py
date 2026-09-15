@@ -103,7 +103,7 @@ class LeadMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = (
-            "id", "direction", "sender", "recipient", "message_type", "content",
+            "id", "conversation", "direction", "sender", "recipient", "message_type", "content",
             "provider_status", "status", "is_ai_generated", "metadata", "created_at", "time_ago",
         )
         read_only_fields = fields
@@ -170,6 +170,36 @@ class LeadSerializer(serializers.ModelSerializer):
     @extend_schema_field(str)
     def get_last_activity_time_ago(self, obj):
         return time_ago(obj.last_message_at or obj.updated_at or obj.created_at)
+
+
+class LeadListResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.CharField(allow_null=True)
+    previous = serializers.CharField(allow_null=True)
+    hot_count = serializers.IntegerField()
+    warm_count = serializers.IntegerField()
+    cold_count = serializers.IntegerField()
+    results = LeadSerializer(many=True)
+
+
+class LeadInboxSerializer(LeadSerializer):
+    last_message = serializers.SerializerMethodField()
+    unread_messages = serializers.SerializerMethodField()
+
+    class Meta(LeadSerializer.Meta):
+        fields = LeadSerializer.Meta.fields + ("last_message", "unread_messages")
+        read_only_fields = LeadSerializer.Meta.read_only_fields + ("last_message", "unread_messages")
+
+    @extend_schema_field(LeadMessageSerializer)
+    def get_last_message(self, obj):
+        message = obj.messages.order_by("-created_at").first()
+        if not message:
+            return None
+        return LeadMessageSerializer(message).data
+
+    @extend_schema_field(int)
+    def get_unread_messages(self, obj):
+        return getattr(obj, "unread_total", None) or 0
 
 
 class LeadDetailSerializer(LeadSerializer):

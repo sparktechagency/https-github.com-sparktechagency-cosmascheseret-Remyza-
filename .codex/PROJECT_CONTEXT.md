@@ -106,7 +106,7 @@ Verified against Sent.dm docs and MCP on 2026-09-10:
 
 ## CURRENT CRM CONTACT / LEAD STATE
 
-As of 2026-09-15, CRM contacts are represented by `crm.Lead` rather than a separate contact table.
+Superseded note from earlier on 2026-09-15: CRM contacts were briefly represented by `crm.Lead`; this was corrected later the same day. The current model uses separate `crm.Contact` and `crm.Lead` records.
 
 Implemented backend behavior:
 
@@ -176,3 +176,13 @@ Updated on 2026-09-15 after compliance review:
 - `sentdm.services.send_welcome_message_to_contact()` has an early disabled return and preserves the previous implementation only as unreachable reference.
 - This avoids dynamic first-touch message risk across SMS/10DLC and WhatsApp.
 - `POST /api/v1/ai/messages/structure/` remains active and should still be used for stateless message drafting.
+
+## CURRENT CRM LEAD LIST, INBOX, AND CONVERSATION API
+
+Updated on 2026-09-15:
+
+- `GET /api/v1/leads/` remains the paginated pipeline lead list and now includes `hot_count`, `warm_count`, and `cold_count` in the paginated response envelope.
+- The count values respect source/search filters but are not narrowed by the current `stage` filter, so the frontend can show all three stage counters while the list is filtered.
+- `GET /api/v1/leads/{id}/` remains a detail endpoint with compact lead detail, activity timeline, metrics, and the existing conversation field for backward compatibility.
+- `GET /api/v1/leads/{id}/conversation/` is the frontend conversation-screen endpoint. It returns the full message history for that lead using normal pagination.
+- `GET /api/v1/leads/inbox/` returns one row per lead that has messages, including lead fields, metrics, unread message count, and the latest message. It does not duplicate leads per message.
