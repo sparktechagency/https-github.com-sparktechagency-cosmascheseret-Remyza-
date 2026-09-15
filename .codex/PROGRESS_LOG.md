@@ -652,3 +652,10 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm notifications` (78 tests)
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`
+## 2026-09-15 - Production Docker Pip Install Hardening
+
+- Investigated deployment build failure at `pip install -r requirements.txt` for `aiohttp==3.14.3`.
+- Verified `aiohttp==3.14.3` exists on PyPI, so the failure was caused by PyPI/index read timeout during Docker build rather than an invalid dependency pin.
+- Updated `Dockerfile.prod` with pip timeout/retry environment defaults.
+- Changed the requirements install command to use `--timeout 120 --retries 10`.
+- Removed the duplicate production dependency install layer because `gunicorn`, `psycopg2-binary`, `boto3`, and `django-storages` are already pinned in `requirements.txt`.
