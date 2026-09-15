@@ -1,4 +1,4 @@
-# Generated manually for CRM contact/source workflow.
+# Generated manually for CRM lead stage/source workflow.
 
 from django.db import migrations, models
 import django.db.models.deletion
@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="lead",
             name="source",
-            field=models.CharField(choices=[("manual", "Manual"), ("csv_upload", "CSV Upload"), ("auto_capture", "Auto Capture"), ("sentdm", "Sent.dm")], db_index=True, default="manual", max_length=50),
+            field=models.CharField(choices=[("manual", "Manual"), ("csv_upload", "CSV Upload"), ("auto_capture", "Auto Capture"), ("sentdm", "Sent.dm")], db_index=True, default="auto_capture", max_length=50),
         ),
         migrations.AlterField(
             model_name="lead",

@@ -17,7 +17,7 @@ from business.models import Organization, PhoneNumber
 from communications.choices import ConversationStatus
 from crm.choices import LeadStage
 from communications.models import Conversation, Message
-from crm.models import FollowUpReminder, Lead
+from crm.models import Contact, FollowUpReminder, Lead
 from subscription.models import UserSubscription
 
 from .choices import SentDMChannel, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
@@ -798,12 +798,15 @@ class SentDMWebhookProcessingTests(TestCase):
 
         lead = Lead.objects.get(organization=self.organization, contact_number="+15551112222")
         conversation = Conversation.objects.get(organization=self.organization, lead=lead)
+        contact = Contact.objects.get(organization=self.organization, contact_number="+15551112222")
         outbound_message = Message.objects.get(provider_message_sid="msg_ai_reply")
         event.refresh_from_db()
 
         self.assertTrue(result["processed"])
         self.assertEqual(result["action"], "ai_reply_sent")
         self.assertEqual(lead.stage, LeadStage.WARM)
+        self.assertEqual(lead.contact, contact)
+        self.assertEqual(contact.linked_lead, lead)
         self.assertTrue(lead.ai_enabled)
         self.assertTrue(conversation.ai_enabled)
         self.assertTrue(outbound_message.is_ai_generated)

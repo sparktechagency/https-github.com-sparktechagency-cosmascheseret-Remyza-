@@ -18,7 +18,7 @@ from business.models import PhoneNumber, PhoneNumberStatus
 from communications.choices import ConversationStatus, MessageDirection, MessageStatus
 from communications.models import Conversation, Message
 from crm.choices import LeadActivityType, LeadSource, LeadStage
-from crm.models import FollowUpReminder, Lead, LeadActivity
+from crm.models import Contact, FollowUpReminder, Lead, LeadActivity
 
 from .choices import SentDMChannel, SentDMCampaignStatus, SentDMMessageDirection, SentDMMessageStatus, SentDMProfileStatus, SentDMWebhookEventStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from .client import SentDMClient, SentDMClientError
@@ -739,11 +739,25 @@ def get_or_create_lead_and_conversation(profile, details):
         return None, None
 
     now = timezone.now()
+    contact, _ = Contact.objects.get_or_create(
+        organization=organization,
+        contact_number=details["from_number"],
+        defaults={
+            "phone_number": details["from_number"],
+            "source": LeadSource.AUTO_CAPTURE,
+            "metadata": {"source": "sentdm", "channel": details.get("channel", "auto")},
+        },
+    )
     lead, lead_created = Lead.objects.get_or_create(
         organization=organization,
         contact_number=details["from_number"],
-        defaults={"business_phone": business_phone, "source": LeadSource.AUTO_CAPTURE},
+        defaults={"business_phone": business_phone, "contact": contact, "source": LeadSource.AUTO_CAPTURE},
     )
+    if not lead.contact_id:
+        lead.contact = contact
+    if not contact.linked_lead_id:
+        contact.linked_lead = lead
+        contact.save(update_fields=["linked_lead", "updated_at"])
     if lead_created:
         LeadActivity.objects.create(
             lead=lead,
@@ -754,7 +768,10 @@ def get_or_create_lead_and_conversation(profile, details):
         )
     lead.last_message_at = now
     lead.last_incoming_at = now
-    lead.save(update_fields=["last_message_at", "last_incoming_at", "updated_at"])
+    lead_update_fields = ["last_message_at", "last_incoming_at", "updated_at"]
+    if lead.contact_id:
+        lead_update_fields.append("contact")
+    lead.save(update_fields=lead_update_fields)
 
     conversation = Conversation.objects.filter(
         organization=organization,

@@ -218,3 +218,17 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [ ] Frontend/mobile: wire hot/warm/cold counts and filters.
 - [ ] Frontend/mobile: wire lead detail timeline, conversation, and metrics.
 - [ ] Decide later if a separate static welcome template should be sent before/inside the AI reply flow.
+
+## 15. CRM CONTACT / LEAD FRONTEND WIRING
+
+- [x] Backend: separate saved Contacts from pipeline Leads.
+- [x] Backend: manual contact CRUD via `/api/v1/contacts/`.
+- [x] Backend: CSV contact upload via `/api/v1/contacts/upload-csv/` with duplicate rows.
+- [x] Backend: paginated lead list via `/api/v1/leads/?page=1&page_size=20`.
+- [x] Backend: auto-capture Sent.dm inbound texters as Contact + Lead.
+- [x] Backend: link Contact and Lead records for cross-navigation.
+- [ ] Frontend/mobile: wire separate Contacts tab to `/api/v1/contacts/`.
+- [ ] Frontend/mobile: wire CSV upload duplicate review to `/api/v1/contacts/upload-csv/`.
+- [ ] Frontend/mobile: wire Leads tab to paginated `/api/v1/leads/`.
+- [ ] Frontend/mobile: wire hot/warm/cold counts from `/api/v1/leads/stats/`.
+- [ ] Frontend/mobile: wire lead detail conversation/activity/metrics.

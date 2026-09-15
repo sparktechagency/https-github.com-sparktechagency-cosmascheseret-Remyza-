@@ -555,3 +555,20 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
   - `.venv\Scripts\python.exe manage.py check`
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (63 tests)
+
+## 2026-09-15 - Corrected CRM Contact vs Lead Separation
+
+- Split CRM address-book contacts from pipeline leads.
+- Added `crm.Contact` for saved contacts: full name, country code, phone number, normalized contact number, email, business name, notes, and source.
+- Added `/api/v1/contacts/` for manual contact CRUD.
+- Moved CSV upload to `/api/v1/contacts/upload-csv/`; CSV imports now create Contacts only and return duplicates/errors.
+- Kept `/api/v1/leads/` for actual pipeline leads and made the lead list paginated with `page` and `page_size`.
+- Linked auto-captured Sent.dm inbound texters to both Contact and Lead records.
+- Added `Lead.contact` and `Contact.linked_lead` relationship fields for frontend cross-navigation.
+- Updated tests so manual/CSV contact creation does not create leads, while auto-capture links contact + lead.
+- Verification passed:
+  - `.venv\Scripts\python.exe manage.py test crm` (4 tests)
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (63 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py spectacular --file tmp_schema.yml --validate`

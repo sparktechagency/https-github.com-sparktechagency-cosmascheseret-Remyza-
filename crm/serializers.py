@@ -4,8 +4,8 @@ from rest_framework import serializers
 
 from communications.choices import MessageDirection
 from communications.models import Message
-from .choices import LeadActivityType, LeadSource, LeadStage
-from .models import Lead, LeadActivity
+from .choices import LeadSource, LeadStage
+from .models import Contact, Lead, LeadActivity
 
 
 HOT_STAGE_VALUES = (LeadStage.HOT,)
@@ -27,8 +27,6 @@ def time_ago(value):
     if hours < 24:
         return f"{hours} hour{'s' if hours != 1 else ''} ago"
     days = hours // 24
-    if days == 0:
-        return "today"
     if days < 7:
         return f"{days} day{'s' if days != 1 else ''} ago"
     weeks = days // 7
@@ -53,6 +51,37 @@ def normalize_contact_number(phone_number, country_code=""):
             code = f"+{code}"
         return f"{code}{value.lstrip('0')}"
     return value
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    is_lead = serializers.SerializerMethodField()
+    lead_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Contact
+        fields = (
+            "id", "full_name", "country_code", "phone_number", "contact_number", "email",
+            "business_name", "notes", "source", "is_lead", "lead_id", "created_at", "updated_at",
+        )
+        read_only_fields = ("id", "contact_number", "source", "is_lead", "lead_id", "created_at", "updated_at")
+
+    def validate(self, attrs):
+        phone_number = attrs.get("phone_number", getattr(self.instance, "phone_number", ""))
+        country_code = attrs.get("country_code", getattr(self.instance, "country_code", ""))
+        contact_number = normalize_contact_number(phone_number, country_code)
+        if not contact_number:
+            raise serializers.ValidationError({"phone_number": "Phone number is required."})
+        attrs["contact_number"] = contact_number
+        return attrs
+
+    @extend_schema_field(bool)
+    def get_is_lead(self, obj):
+        return bool(obj.linked_lead_id or getattr(obj, "lead_record", None))
+
+    @extend_schema_field(int)
+    def get_lead_id(self, obj):
+        linked_lead = obj.linked_lead_id or getattr(getattr(obj, "lead_record", None), "id", None)
+        return linked_lead
 
 
 class LeadActivitySerializer(serializers.ModelSerializer):
@@ -97,16 +126,17 @@ class LeadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lead
         fields = (
-            "id", "full_name", "contact_number", "email", "business_name", "notes",
+            "id", "contact", "full_name", "contact_number", "email", "business_name", "notes",
             "source", "stage", "score", "score_percentage", "days_in_pipeline",
             "total_messages", "inbound_message_count", "outbound_message_count", "response_rate",
             "ai_enabled", "is_opted_out", "last_message_at", "last_activity_time_ago",
             "created_at", "updated_at",
         )
         read_only_fields = (
-            "id", "source", "score_percentage", "days_in_pipeline", "total_messages",
-            "inbound_message_count", "outbound_message_count", "response_rate", "ai_enabled",
-            "is_opted_out", "last_message_at", "last_activity_time_ago", "created_at", "updated_at",
+            "id", "contact", "full_name", "contact_number", "email", "business_name", "notes", "source",
+            "score_percentage", "days_in_pipeline", "total_messages", "inbound_message_count",
+            "outbound_message_count", "response_rate", "ai_enabled", "is_opted_out", "last_message_at",
+            "last_activity_time_ago", "created_at", "updated_at",
         )
 
     @extend_schema_field(int)
@@ -156,11 +186,11 @@ class LeadDetailSerializer(LeadSerializer):
         return LeadMessageSerializer(messages, many=True).data
 
 
-class LeadCSVUploadSerializer(serializers.Serializer):
+class ContactCSVUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
 
 
-class LeadCSVUploadResponseSerializer(serializers.Serializer):
+class ContactCSVUploadResponseSerializer(serializers.Serializer):
     created_count = serializers.IntegerField()
     duplicate_count = serializers.IntegerField()
     error_count = serializers.IntegerField()

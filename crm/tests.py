@@ -7,10 +7,10 @@ from business.models import Organization
 from communications.choices import ConversationStatus, MessageDirection, MessageStatus
 from communications.models import Conversation, Message
 from crm.choices import LeadActivityType, LeadSource, LeadStage
-from crm.models import Lead, LeadActivity
+from crm.models import Contact, Lead, LeadActivity
 
 
-class LeadContactAPITests(TestCase):
+class CRMContactAndLeadAPITests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             phone_number="+15550000001",
@@ -27,55 +27,58 @@ class LeadContactAPITests(TestCase):
             return data["results"]
         return data
 
-    def test_manual_contact_create_records_lead_activity(self):
+    def test_manual_contact_create_does_not_create_lead(self):
         response = self.client.post(
-            "/api/v1/leads/",
+            "/api/v1/contacts/",
             {
                 "full_name": "Jane Smith",
-                "contact_number": "+15551112222",
+                "country_code": "+1",
+                "phone_number": "5551112222",
                 "email": "jane@example.com",
                 "business_name": "Jane Homes",
                 "notes": "Met at open house.",
-                "stage": LeadStage.WARM,
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, 201, response.content)
-        lead = Lead.objects.get(contact_number="+15551112222")
-        self.assertEqual(lead.organization, self.organization)
-        self.assertEqual(lead.company, "Jane Homes")
-        self.assertEqual(lead.source, LeadSource.MANUAL)
-        self.assertIsNone(lead.business_phone)
-        self.assertTrue(lead.activities.filter(activity_type=LeadActivityType.CREATED, title="Lead created").exists())
+        contact = Contact.objects.get(contact_number="+15551112222")
+        self.assertEqual(contact.organization, self.organization)
+        self.assertEqual(contact.business_name, "Jane Homes")
+        self.assertEqual(contact.source, LeadSource.MANUAL)
+        self.assertFalse(Lead.objects.filter(contact_number="+15551112222").exists())
+        self.assertFalse(response.json()["is_lead"])
 
     def test_csv_upload_creates_contacts_and_returns_duplicates(self):
-        Lead.objects.create(
+        Contact.objects.create(
             organization=self.organization,
-            full_name="Existing Lead",
+            full_name="Existing Contact",
+            country_code="+1",
+            phone_number="5553334444",
             contact_number="+15553334444",
             source=LeadSource.MANUAL,
         )
         csv_content = (
-            "full_name,phone_number,email,business_name,notes\n"
-            "New Lead,+15552223333,new@example.com,New Co,Fresh lead\n"
-            "Duplicate Existing,+15553334444,dup@example.com,Dup Co,Already saved\n"
-            "Duplicate In File,+15552223333,dup2@example.com,Dup File,Repeated\n"
-            "Missing Phone,,bad@example.com,Bad Co,No phone\n"
+            "full_name,country_code,phone_number,email,business_name,notes\n"
+            "New Contact,+1,5552223333,new@example.com,New Co,Fresh contact\n"
+            "Duplicate Existing,+1,5553334444,dup@example.com,Dup Co,Already saved\n"
+            "Duplicate In File,+1,5552223333,dup2@example.com,Dup File,Repeated\n"
+            "Missing Phone,+1,,bad@example.com,Bad Co,No phone\n"
         )
         upload = SimpleUploadedFile("contacts.csv", csv_content.encode("utf-8"), content_type="text/csv")
 
-        response = self.client.post("/api/v1/leads/upload-csv/", {"file": upload}, format="multipart")
+        response = self.client.post("/api/v1/contacts/upload-csv/", {"file": upload}, format="multipart")
 
         self.assertEqual(response.status_code, 200, response.content)
         data = response.json()
         self.assertEqual(data["created_count"], 1)
         self.assertEqual(data["duplicate_count"], 2)
         self.assertEqual(data["error_count"], 1)
-        self.assertEqual(Lead.objects.get(contact_number="+15552223333").source, LeadSource.CSV_UPLOAD)
+        self.assertEqual(Contact.objects.get(contact_number="+15552223333").source, LeadSource.CSV_UPLOAD)
+        self.assertFalse(Lead.objects.filter(contact_number="+15552223333").exists())
         self.assertEqual({item["contact_number"] for item in data["duplicates"]}, {"+15553334444", "+15552223333"})
 
-    def test_lead_stats_and_stage_filter_groups_hot_warm_cold(self):
+    def test_lead_list_is_paginated_and_stage_filter_groups_hot_warm_cold(self):
         Lead.objects.create(organization=self.organization, contact_number="+15550000002", stage=LeadStage.HOT)
         Lead.objects.create(organization=self.organization, contact_number="+15550000003", stage=LeadStage.WARM)
         Lead.objects.create(organization=self.organization, contact_number="+15550000004", stage=LeadStage.QUALIFIED)
@@ -88,18 +91,32 @@ class LeadContactAPITests(TestCase):
         self.assertEqual(stats_response.json()["warm"], 2)
         self.assertEqual(stats_response.json()["cold"], 2)
 
-        warm_response = self.client.get("/api/v1/leads/?stage=warm")
+        warm_response = self.client.get("/api/v1/leads/?stage=warm&page_size=1")
         self.assertEqual(warm_response.status_code, 200, warm_response.content)
-        self.assertEqual(len(self.response_items(warm_response)), 2)
+        data = warm_response.json()
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(len(data["results"]), 1)
+        self.assertIn("next", data)
 
     def test_lead_detail_includes_conversation_metrics_and_activities(self):
+        contact = Contact.objects.create(
+            organization=self.organization,
+            full_name="Conversation Contact",
+            country_code="+1",
+            phone_number="5554445555",
+            contact_number="+15554445555",
+            source=LeadSource.AUTO_CAPTURE,
+        )
         lead = Lead.objects.create(
             organization=self.organization,
+            contact=contact,
             full_name="Conversation Lead",
             contact_number="+15554445555",
             source=LeadSource.AUTO_CAPTURE,
             score=75,
         )
+        contact.linked_lead = lead
+        contact.save(update_fields=["linked_lead", "updated_at"])
         LeadActivity.objects.create(
             lead=lead,
             activity_type=LeadActivityType.CREATED,
@@ -137,6 +154,7 @@ class LeadContactAPITests(TestCase):
 
         self.assertEqual(response.status_code, 200, response.content)
         data = response.json()
+        self.assertEqual(data["contact"], contact.id)
         self.assertEqual(data["score_percentage"], 75)
         self.assertEqual(data["total_messages"], 2)
         self.assertEqual(data["response_rate"], 100)

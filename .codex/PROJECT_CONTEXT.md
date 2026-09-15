@@ -127,3 +127,18 @@ Current caveats:
 - CSV import accepts practical column aliases but does not yet support a rich frontend preview/confirm step.
 - Auto-capture welcome behavior currently uses the existing Sent.dm AI reply path, not a separate static welcome-template engine.
 - Follow-up outbound Day 1/3/7/14 messaging remains separate product scope.
+
+## CURRENT CRM CONTACT VS LEAD MODEL
+
+Updated on 2026-09-15 after product clarification:
+
+- Contacts and leads are separate concepts in Chesera.
+- `crm.Contact` is the user's saved address book: full name, country code, phone number, normalized contact number, email, business name, notes, and source.
+- `crm.Lead` is the pipeline/conversation record created when a person engages through messaging or otherwise enters the lead flow.
+- Manual contact save and CSV upload create Contacts only; they do not create Leads by themselves.
+- `/api/v1/contacts/` is the address-book API.
+- `/api/v1/contacts/upload-csv/` imports Contacts and returns duplicate rows separately.
+- `/api/v1/leads/` is the paginated pipeline API with `page` and `page_size` query parameters.
+- `/api/v1/leads/stats/` returns lead counts for total/hot/warm/cold/opted-out.
+- Sent.dm inbound auto-capture creates or reuses a Contact, creates or reuses a Lead, and links them together.
+- Lead detail includes activity timeline, conversation messages, score percentage, days in pipeline, source, response rate, and message counts.
