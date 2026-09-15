@@ -803,7 +803,7 @@ class SentDMWebhookProcessingTests(TestCase):
 
         self.assertTrue(result["processed"])
         self.assertEqual(result["action"], "ai_reply_sent")
-        self.assertEqual(lead.stage, LeadStage.QUALIFIED)
+        self.assertEqual(lead.stage, LeadStage.WARM)
         self.assertTrue(lead.ai_enabled)
         self.assertTrue(conversation.ai_enabled)
         self.assertTrue(outbound_message.is_ai_generated)

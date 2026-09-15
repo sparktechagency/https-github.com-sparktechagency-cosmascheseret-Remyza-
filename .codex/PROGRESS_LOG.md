@@ -536,3 +536,22 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test accounts` (9 tests)
   - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (59 tests)
   - `.venv\Scripts\python.exe manage.py check`
+
+## 2026-09-15 - CRM Contacts, CSV Import, Lead Metrics, and Auto-Capture Activities
+
+- Added CRM contact/lead API at `/api/v1/leads/` using the existing `crm.Lead` model as the single contact record.
+- Added first-class `cold`, `warm`, and `hot` lead stages while preserving older stored stages for compatibility.
+- Added lead `source` tracking: `manual`, `csv_upload`, `auto_capture`, and `sentdm`.
+- Made `Lead.business_phone` optional so free/trial users and users awaiting number assignment can still save/import contacts.
+- Added manual contact create/list/detail/update endpoints with Swagger descriptions under `CRM - Contacts`.
+- Added CSV upload endpoint `/api/v1/leads/upload-csv/` with duplicate reporting and row-level error reporting.
+- Added `/api/v1/leads/stats/` for total/hot/warm/cold/opted-out counts.
+- Lead detail now exposes activity timeline, conversation messages, lead score percentage, days in pipeline, message counts, source, and response rate.
+- Sent.dm inbound auto-capture now records contact source and timeline activities: lead created, first reply received, AI welcome/reply sent, and status changed by AI.
+- Added CRM regression tests for manual contact creation, CSV duplicate handling, hot/warm/cold stats/filtering, and detail conversation metrics.
+- Updated Sent.dm AI-stage expectation so `warm` maps to the new `LeadStage.WARM` value.
+- Verification passed:
+  - `.venv\Scripts\python.exe manage.py test crm` (4 tests)
+  - `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py test accounts ai business crm communications subscription sentdm` (63 tests)

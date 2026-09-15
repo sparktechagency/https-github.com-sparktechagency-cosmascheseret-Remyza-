@@ -17,8 +17,8 @@ from ai.ai_service import AIService
 from business.models import PhoneNumber, PhoneNumberStatus
 from communications.choices import ConversationStatus, MessageDirection, MessageStatus
 from communications.models import Conversation, Message
-from crm.choices import LeadStage
-from crm.models import FollowUpReminder, Lead
+from crm.choices import LeadActivityType, LeadSource, LeadStage
+from crm.models import FollowUpReminder, Lead, LeadActivity
 
 from .choices import SentDMChannel, SentDMCampaignStatus, SentDMMessageDirection, SentDMMessageStatus, SentDMProfileStatus, SentDMWebhookEventStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from .client import SentDMClient, SentDMClientError
@@ -739,11 +739,19 @@ def get_or_create_lead_and_conversation(profile, details):
         return None, None
 
     now = timezone.now()
-    lead, _ = Lead.objects.get_or_create(
+    lead, lead_created = Lead.objects.get_or_create(
         organization=organization,
         contact_number=details["from_number"],
-        defaults={"business_phone": business_phone},
+        defaults={"business_phone": business_phone, "source": LeadSource.AUTO_CAPTURE},
     )
+    if lead_created:
+        LeadActivity.objects.create(
+            lead=lead,
+            activity_type=LeadActivityType.CREATED,
+            title="Lead created",
+            description="Contact was auto-captured from an inbound message.",
+            metadata={"source": LeadSource.AUTO_CAPTURE, "channel": details.get("channel", "auto")},
+        )
     lead.last_message_at = now
     lead.last_incoming_at = now
     lead.save(update_fields=["last_message_at", "last_incoming_at", "updated_at"])
@@ -807,6 +815,14 @@ def store_inbound_sentdm_message(event, profile, lead, conversation, details):
             },
         )
         if created:
+            if not lead.activities.filter(activity_type=LeadActivityType.MESSAGE_RECEIVED).exists():
+                LeadActivity.objects.create(
+                    lead=lead,
+                    activity_type=LeadActivityType.MESSAGE_RECEIVED,
+                    title="First reply received",
+                    description="Lead sent the first inbound message to the Chesera number.",
+                    metadata={"source": "sentdm", "channel": details.get("channel", "auto")},
+                )
             conversation.total_messages += 1
             conversation.unread_messages += 1
             conversation.last_message_at = timezone.now()
@@ -875,14 +891,14 @@ def send_control_autoresponse(profile, lead, conversation, text, channel, kind):
 def normalize_ai_stage(stage):
     stage_value = (stage or "").strip().lower()
     if stage_value == "cold":
-        return LeadStage.CONTACTED
+        return LeadStage.COLD
     if stage_value == "warm":
-        return LeadStage.QUALIFIED
+        return LeadStage.WARM
     if stage_value == "hot":
         return LeadStage.HOT
     if stage_value in LeadStage.values:
         return stage_value
-    return LeadStage.CONTACTED
+    return LeadStage.COLD
 
 
 
@@ -951,6 +967,7 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
     )
 
     now = timezone.now()
+    old_stage = lead.stage
     lead.stage = normalize_ai_stage(ai_response.get("stage"))
     lead.last_message_at = now
     lead.last_outgoing_at = now
@@ -962,6 +979,22 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
         lead_update_fields.extend(["ai_enabled", "handed_over_at"])
         conversation.ai_enabled = False
     lead.save(update_fields=lead_update_fields)
+    if old_stage != lead.stage:
+        LeadActivity.objects.create(
+            lead=lead,
+            activity_type=LeadActivityType.STAGE_CHANGED,
+            title=f"Status changed to {lead.get_stage_display()}",
+            description=f"Lead status changed from {old_stage} to {lead.stage}.",
+            metadata={"from": old_stage, "to": lead.stage, "source": "ai"},
+        )
+    ai_activity_title = "AI welcome sent" if not lead.activities.filter(activity_type=LeadActivityType.AI_REPLIED).exists() else "AI reply sent"
+    LeadActivity.objects.create(
+        lead=lead,
+        activity_type=LeadActivityType.AI_REPLIED,
+        title=ai_activity_title,
+        description="Chesera AI sent an automated reply.",
+        metadata={"source": "sentdm", "channel": send_channel or "auto"},
+    )
 
     conversation.total_messages += 1
     conversation.last_message_at = now

@@ -103,3 +103,27 @@ Verified against Sent.dm docs and MCP on 2026-09-10:
 - Outbound auto sends for a profile without active agent WhatsApp resolve to SMS locally so Sent.dm does not accidentally route through Chesera/org WhatsApp. Explicit WhatsApp sends fail for manual/direct messages unless direct agent WhatsApp is active; reply/follow-up flows can fall back to SMS.
 - `/api/v1/me/plan-and-progress/` now returns backend activation state for subscription, business compliance, Sender Profile, number assignment, 10DLC campaign, SMS/RCS readiness, and optional WhatsApp state. Number assignment exposes `number_assignment_status` as `pending`, `assigned`, or `needs_attention`; pending numbers show the local-inventory delay message.
 - MCP confirmed the connected account is an organization and has approved OPT_IN, OPT_OUT, and HELP templates, but MCP did not expose Sender Profile creation, webhook management, 10DLC submission, or channel configuration status tools.
+
+## CURRENT CRM CONTACT / LEAD STATE
+
+As of 2026-09-15, CRM contacts are represented by `crm.Lead` rather than a separate contact table.
+
+Implemented backend behavior:
+
+- Authenticated users can manage contacts/leads through `/api/v1/leads/`.
+- Manual contact create supports full name, phone number with country code already embedded in `contact_number`, email, business name, notes, and lead stage.
+- `business_name` is exposed in the API and stored internally in the existing `Lead.company` field.
+- Contacts can be created before Sent.dm number assignment because `Lead.business_phone` is now optional.
+- Lead source is tracked as `manual`, `csv_upload`, `auto_capture`, or `sentdm`.
+- Hot/warm/cold are now first-class lead stages while older stages remain valid for compatibility.
+- `/api/v1/leads/?stage=hot|warm|cold` filters lead lists by dashboard-friendly stage groups.
+- `/api/v1/leads/stats/` returns total, hot, warm, cold, and opted-out counts.
+- `/api/v1/leads/{id}/` returns lead details, activity timeline, conversation messages, score percentage, days in pipeline, total messages, inbound/outbound counts, source, and response rate.
+- `/api/v1/leads/upload-csv/` imports contacts from CSV and returns created rows, duplicate rows, and row-level errors.
+- Sent.dm inbound auto-capture now creates/updates the lead with source `auto_capture`, records `Lead created`, records `First reply received`, records `AI welcome sent` / `AI reply sent`, and records AI-driven stage changes.
+
+Current caveats:
+
+- CSV import accepts practical column aliases but does not yet support a rich frontend preview/confirm step.
+- Auto-capture welcome behavior currently uses the existing Sent.dm AI reply path, not a separate static welcome-template engine.
+- Follow-up outbound Day 1/3/7/14 messaging remains separate product scope.

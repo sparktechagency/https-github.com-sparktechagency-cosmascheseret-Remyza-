@@ -20,8 +20,8 @@ class LeadTagAssignmentInline(admin.TabularInline):
 
 @admin.register(Lead)
 class LeadAdmin(admin.ModelAdmin):
-    list_display = ("id", "full_name", "contact_number", "organization", "business_phone", "stage", "score", "ai_enabled", "is_opted_out", "last_message_at", "created_at")
-    list_filter = ("stage", "ai_enabled", "is_opted_out", "organization", "created_at")
+    list_display = ("id", "full_name", "contact_number", "organization", "business_phone", "source", "stage", "score", "ai_enabled", "is_opted_out", "last_message_at", "created_at")
+    list_filter = ("stage", "source", "ai_enabled", "is_opted_out", "organization", "created_at")
     search_fields = ("full_name", "contact_number", "email", "company", "organization__name")
     autocomplete_fields = ("organization", "business_phone")
     list_select_related = ("organization", "business_phone")

@@ -2,17 +2,18 @@ import uuid
 
 from django.db import models
 from common.models import BaseModel
-from .choices import LeadStage, LeadActivityType
+from .choices import LeadActivityType, LeadSource, LeadStage
 
 class Lead(BaseModel):
     organization = models.ForeignKey("business.Organization", on_delete=models.CASCADE, related_name="leads")
-    business_phone = models.ForeignKey("business.PhoneNumber", on_delete=models.PROTECT, related_name="leads")
+    business_phone = models.ForeignKey("business.PhoneNumber", on_delete=models.SET_NULL, blank=True, null=True, related_name="leads")
     
     full_name = models.CharField(max_length=100, blank=True)
     email = models.EmailField(blank=True)
     contact_number = models.CharField(max_length=30, db_index=True)
     company = models.CharField(max_length=255, blank=True)
-    stage = models.CharField(max_length=20, choices=LeadStage.choices, default=LeadStage.NEW, db_index=True)
+    source = models.CharField(max_length=50, choices=LeadSource.choices, default=LeadSource.MANUAL, db_index=True)
+    stage = models.CharField(max_length=20, choices=LeadStage.choices, default=LeadStage.COLD, db_index=True)
     score = models.PositiveSmallIntegerField(default=0)
     ai_enabled = models.BooleanField(default=True)
     is_opted_out = models.BooleanField(default=False, db_index=True)
@@ -36,6 +37,7 @@ class Lead(BaseModel):
         indexes = [
             models.Index(fields=["organization", "contact_number"]),
             models.Index(fields=["stage"]),
+            models.Index(fields=["source"]),
             models.Index(fields=["score"]),
             models.Index(fields=["last_message_at"]),
         ]

@@ -199,3 +199,22 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [ ] Run final test suite.
 - [ ] Run final schema validation.
 - [ ] Produce final handoff summary for client.
+
+## 14. CRM CONTACTS / LEADS
+
+- [x] Use existing `crm.Lead` as the unified contact/lead record.
+- [x] Support manual contact save with full name, phone number, email, business name, and notes.
+- [x] Allow contacts before Sent.dm number assignment by making `business_phone` optional.
+- [x] Add lead source tracking for manual, CSV upload, and auto-capture.
+- [x] Add CSV upload endpoint with duplicate list in the response.
+- [x] Add hot/warm/cold lead counts endpoint.
+- [x] Add hot/warm/cold lead list filtering.
+- [x] Add lead detail response with activity timeline and conversation messages.
+- [x] Add metrics: lead score percentage, days in pipeline, total messages, source, and response rate.
+- [x] Auto-capture inbound Sent.dm texters as contacts.
+- [x] Record key activities: lead created, first reply received, AI welcome/reply sent, and status changed.
+- [ ] Frontend/mobile: wire manual contact form.
+- [ ] Frontend/mobile: wire CSV upload and duplicate review UI.
+- [ ] Frontend/mobile: wire hot/warm/cold counts and filters.
+- [ ] Frontend/mobile: wire lead detail timeline, conversation, and metrics.
+- [ ] Decide later if a separate static welcome template should be sent before/inside the AI reply flow.
