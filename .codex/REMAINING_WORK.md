@@ -268,6 +268,8 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Disable automatic welcome-message queueing from contact creation/import.
 - [x] Disable Sent.dm welcome-message Celery task/send flow.
 - [x] Keep stateless AI message structuring endpoint active.
+- [x] Add backend-owned welcome message preset API at `/api/v1/welcome-message/` with `professional`, `friendly`, and `casual` options.
+- [ ] Frontend/mobile: wire welcome message preset selection UI to `/api/v1/welcome-message/`.
 - [ ] Future product decision: only re-enable welcome/first-touch messages with controlled provider-approved templates and explicit consent rules.
 ## 19. NOTIFICATIONS
 

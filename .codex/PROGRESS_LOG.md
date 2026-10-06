@@ -659,3 +659,15 @@ Validation run:
 - Updated `Dockerfile.prod` with pip timeout/retry environment defaults.
 - Changed the requirements install command to use `--timeout 120 --retries 10`.
 - Removed the duplicate production dependency install layer because `gunicorn`, `psycopg2-binary`, `boto3`, and `django-storages` are already pinned in `requirements.txt`.
+## 2026-10-06 - Welcome Message Preset Selection API
+
+- Kept the old free-form welcome template endpoint hidden for compliance safety.
+- Added backend-owned welcome message presets: `professional`, `friendly`, and `casual`.
+- Added `/api/v1/welcome-message/`:
+  - `GET` returns all presets and the user's selected preset.
+  - `GET ?template=professional|friendly|casual` returns one preset.
+  - `PUT/PATCH` stores the selected preset by key.
+- Preset messages include STOP opt-out language and are not editable through the API.
+- Refined the three preset messages so each tone is distinct: professional is polished/team-oriented, friendly is warm/helpful, and casual is short/conversational.
+- Added tests for listing presets, retrieving one preset, selecting/updating the selected preset, invalid preset handling, and ignoring custom text.
+- Verification note: `python -m compileall -q communications` passed. Django `test/check` could not run in the current workspace because the `.venv` folder is absent and global Python is missing project dependencies such as `django_extensions`.

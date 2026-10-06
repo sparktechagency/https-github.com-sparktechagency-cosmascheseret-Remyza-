@@ -198,3 +198,15 @@ Updated on 2026-09-15:
 - Notification templates currently cover: welcome/signup, new user admin alert, subscription record/active, Sent.dm Sender Profile request/completion, 10DLC campaign request, WhatsApp connection request, new lead captured, and system alerts.
 - Notification hooks are wired into signup, IAP subscription creation, Sent.dm profile/campaign/WhatsApp actions, and Sent.dm inbound new-lead auto-capture.
 - Production now runs through Daphne/ASGI so HTTP and websocket traffic can share the same backend service. Channels uses Redis through `CHANNEL_REDIS_URL`, defaulting to `CELERY_BROKER_URL`. Nginx config includes a `/ws/` proxy block with Upgrade headers for admin notification websockets.
+## CURRENT WELCOME MESSAGE PRESET API
+
+Updated on 2026-10-06:
+
+- Free-form welcome message editing remains disabled for compliance safety.
+- The legacy `/api/v1/message-templates/welcome/` route remains commented out and inaccessible.
+- Backend-owned preset welcome messages are exposed at `/api/v1/welcome-message/`.
+- Supported preset keys are `professional`, `friendly`, and `casual`.
+- `GET /api/v1/welcome-message/` returns all presets plus the user's selected preset when configured.
+- `GET /api/v1/welcome-message/?template=professional` returns one preset and the current selection.
+- `PUT/PATCH /api/v1/welcome-message/` accepts only `{ "template": "professional|friendly|casual" }` and stores the selected backend-owned template in `StaticMessageTemplate`.
+- Custom message text is not accepted through this API; frontend should only let users choose one of the backend presets.
