@@ -1,3 +1,7 @@
+import base64
+from io import BytesIO
+
+import qrcode
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework import response
@@ -377,6 +381,13 @@ class CurrentUserCheseraNumberAPIView(APIView):
             return "Messaging activation needs attention. Number assignment could not be completed automatically."
         return "Messaging activation is in progress. Number assignment may take additional time if local inventory is unavailable."
 
+    def build_qr_code_base64(self, payload):
+        image = qrcode.make(payload)
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
+
     @extend_schema(
         tags=["User Chesera Number"],
         summary="Get user's Chesera number",
@@ -386,18 +397,25 @@ class CurrentUserCheseraNumberAPIView(APIView):
     def get(self, request):
         profile = self.get_profile(request.user)
         number_assignment_status = self.get_number_assignment_status(profile)
+        phone_number = profile.phone_number if profile and profile.phone_number else None
+        qr_payload = f"sms:{phone_number}" if phone_number else None
         data = {
-            "assigned": bool(profile and profile.phone_number),
-            "phone_number": profile.phone_number if profile and profile.phone_number else None,
+            "assigned": bool(phone_number),
+            "phone_number": phone_number,
             "status": number_assignment_status,
             "number_assignment_status": number_assignment_status,
             "message": self.get_number_assignment_message(number_assignment_status),
             "provider": "sentdm",
             "profile_id": profile.profile_id if profile else None,
             "profile_status": profile.status if profile else None,
-            "sms_rcs_active": bool(profile and profile.phone_number and profile.status in ("approved", "active")),
+            "sms_rcs_active": bool(phone_number and profile.status in ("approved", "active")),
+            "qr_payload": qr_payload,
+            "qr_code_base64": self.build_qr_code_base64(qr_payload) if qr_payload else None,
         }
-        return Response({"success": True, "data": data}, status=status.HTTP_200_OK)
+        response = Response({"success": True, "data": data}, status=status.HTTP_200_OK)
+        if phone_number:
+            response["Cache-Control"] = "private, max-age=3600"
+        return response
 
 class CurrentUserPlanAndProgressAPIView(APIView):
     permission_classes = [IsAuthenticated]

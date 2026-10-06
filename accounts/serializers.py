@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from django.contrib.auth import authenticate
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -138,12 +140,25 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "city",
             "country",
             "country_code",
+            "timezone",
             "profile_picture",
             "user_type",
             "is_phone_verified",
             "last_activity_at",
         )
         read_only_fields = ("id", "phone_number", "user_type", "is_phone_verified", "last_activity_at")
+
+    def validate_timezone(self, value):
+        timezone_value = (value or "").strip()
+        if not timezone_value:
+            return ""
+        try:
+            ZoneInfo(timezone_value)
+        except ZoneInfoNotFoundError as exc:
+            raise serializers.ValidationError(
+                "Enter a valid IANA timezone name, for example 'America/New_York', 'America/Chicago', 'Asia/Dhaka', or 'UTC'."
+            ) from exc
+        return timezone_value
 
 
 class CurrentUserCheseraNumberSerializer(serializers.Serializer):
@@ -156,3 +171,5 @@ class CurrentUserCheseraNumberSerializer(serializers.Serializer):
     profile_id = serializers.CharField(allow_null=True)
     profile_status = serializers.CharField(allow_null=True)
     sms_rcs_active = serializers.BooleanField()
+    qr_payload = serializers.CharField(allow_null=True)
+    qr_code_base64 = serializers.CharField(allow_null=True)

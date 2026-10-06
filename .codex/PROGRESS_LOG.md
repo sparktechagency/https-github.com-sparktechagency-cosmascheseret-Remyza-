@@ -671,3 +671,13 @@ Validation run:
 - Refined the three preset messages so each tone is distinct: professional is polished/team-oriented, friendly is warm/helpful, and casual is short/conversational.
 - Added tests for listing presets, retrieving one preset, selecting/updating the selected preset, invalid preset handling, and ignoring custom text.
 - Verification note: `python -m compileall -q communications` passed. Django `test/check` could not run in the current workspace because the `.venv` folder is absent and global Python is missing project dependencies such as `django_extensions`.
+
+## 2026-10-06 - Profile Timezone and Chesera Number QR
+
+- Added optional `timezone` to user profiles with IANA timezone validation.
+- Signup remains unchanged; timezone can be updated later through `PATCH /api/v1/me/`.
+- Extended `GET /api/v1/me/chesera-number/` with `qr_payload` and `qr_code_base64`.
+- QR payload uses `sms:+number` for assigned Sent.dm/Chesera numbers.
+- QR image data is generated per request and not stored in the database.
+- Added `qrcode[pil]` dependency.
+- Added account tests for timezone update/validation and QR fields on assigned/pending Chesera number responses.

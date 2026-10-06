@@ -153,6 +153,22 @@ GET /api/v1/me/chesera-number/
 
 The endpoint does not require an active paid subscription because free/pending users still need a clear UI state. It returns `assigned=false` until a Sent.dm Sender Profile has a `phone_number`. The response includes the number assignment status, provider, profile id/status, and SMS/RCS active boolean.
 
+Updated on 2026-10-06:
+
+- The same endpoint now includes `qr_payload` and `qr_code_base64`.
+- When a Chesera number is assigned, `qr_payload` uses `sms:+number` so scanning the QR opens a message flow to the assigned Chesera number.
+- QR images are generated on request using `qrcode[pil]`; they are not stored in the database.
+- Assigned-number responses include `Cache-Control: private, max-age=3600` so clients can cache the QR briefly while still reflecting future number changes.
+
+## CURRENT USER PROFILE TIMEZONE
+
+Updated on 2026-10-06:
+
+- User profiles now include optional `timezone`.
+- Signup does not require timezone.
+- `PATCH /api/v1/me/` can update timezone after signup.
+- Timezone values are validated as IANA names, for example `America/New_York`, `America/Chicago`, `Asia/Dhaka`, or `UTC`.
+
 ## CURRENT WELCOME MESSAGE AND STATELESS AI MESSAGE ENDPOINTS
 
 As of 2026-09-15:

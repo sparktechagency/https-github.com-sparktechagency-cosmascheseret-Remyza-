@@ -133,6 +133,7 @@ class CurrentUserAPIViewTests(TestCase):
                 "city": "Dallas",
                 "country": "United States",
                 "country_code": "+1",
+                "timezone": "America/Chicago",
             },
             format="json",
         )
@@ -149,9 +150,24 @@ class CurrentUserAPIViewTests(TestCase):
         self.assertEqual(self.user.email, "updated@example.com")
         self.assertEqual(self.user.full_name, "Updated Name")
         self.assertEqual(self.user.city, "Dallas")
+        self.assertEqual(self.user.timezone, "America/Chicago")
         self.assertEqual(response.data["data"]["phone_number"], "+15551112222")
         self.assertEqual(response.data["data"]["user_type"], "CLIENT")
         self.assertTrue(response.data["data"]["is_phone_verified"])
+        self.assertEqual(response.data["data"]["timezone"], "America/Chicago")
+
+    def test_patch_rejects_invalid_timezone(self):
+        request = self.factory.patch(
+            "/api/v1/me/",
+            {"timezone": "Not/A_Timezone"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = CurrentUserAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("timezone", response.data)
 
 class CurrentUserCheseraNumberAPIViewTests(TestCase):
     def setUp(self):
@@ -174,6 +190,8 @@ class CurrentUserCheseraNumberAPIViewTests(TestCase):
         self.assertEqual(response.data["data"]["number_assignment_status"], "pending")
         self.assertEqual(response.data["data"]["provider"], "sentdm")
         self.assertFalse(response.data["data"]["sms_rcs_active"])
+        self.assertIsNone(response.data["data"]["qr_payload"])
+        self.assertIsNone(response.data["data"]["qr_code_base64"])
 
     def test_returns_assigned_chesera_number_from_sentdm_profile(self):
         SentDMProfile.objects.create(
@@ -194,6 +212,9 @@ class CurrentUserCheseraNumberAPIViewTests(TestCase):
         self.assertEqual(response.data["data"]["profile_id"], "profile_number_assigned")
         self.assertEqual(response.data["data"]["profile_status"], SentDMProfileStatus.APPROVED)
         self.assertTrue(response.data["data"]["sms_rcs_active"])
+        self.assertEqual(response.data["data"]["qr_payload"], "sms:+15559990000")
+        self.assertTrue(response.data["data"]["qr_code_base64"].startswith("data:image/png;base64,"))
+        self.assertEqual(response["Cache-Control"], "private, max-age=3600")
 
 class CurrentUserPlanAndProgressAPIViewTests(TestCase):
     def setUp(self):
