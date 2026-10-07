@@ -2,6 +2,8 @@ from pathlib import Path
 from datetime import timedelta
 import os
 
+from celery.schedules import crontab
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 from dotenv import load_dotenv
@@ -271,6 +273,12 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "False").strip().lower() in ("true", "1", "yes")
 CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_BEAT_SCHEDULE = {
+    "send-due-automated-follow-ups-every-minute": {
+        "task": "sentdm.tasks.send_due_automated_follow_ups_task",
+        "schedule": crontab(),
+    },
+}
 SENTDM_WEBHOOK_ASYNC_ENABLED = os.getenv("SENTDM_WEBHOOK_ASYNC_ENABLED", "True").strip().lower() in ("true", "1", "yes")
 
 # Channels / WebSocket notifications

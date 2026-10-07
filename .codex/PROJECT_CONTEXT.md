@@ -202,6 +202,20 @@ Updated on 2026-09-15:
 - `GET /api/v1/leads/{id}/` remains a detail endpoint with compact lead detail, activity timeline, metrics, and the existing conversation field for backward compatibility.
 - `GET /api/v1/leads/{id}/conversation/` is the frontend conversation-screen endpoint. It returns the full message history for that lead using normal pagination.
 - `GET /api/v1/leads/inbox/` returns one row per lead that has messages, including lead fields, metrics, unread message count, and the latest message. It does not duplicate leads per message.
+
+## CURRENT AUTOMATED FOLLOW-UP SEQUENCE
+
+Updated on 2026-10-07:
+
+- Manual `FollowUpReminder` records remain in place for future/internal reminder use.
+- Customer-facing follow-up messages use the separate `crm.AutomatedFollowUp` model.
+- New auto-captured inbound leads get backend-controlled follow-ups scheduled for Day 1, Day 3, Day 7, and Day 14.
+- Follow-up message text is fixed in the backend and includes STOP opt-out language; agents cannot write custom follow-up text.
+- Due follow-ups are sent by `sentdm.tasks.send_due_automated_follow_ups_task`, scheduled every minute through `CELERY_BEAT_SCHEDULE`.
+- Follow-ups use the existing Sent.dm outbound channel policy with `purpose="follow_up"`.
+- Follow-ups outside WhatsApp's 24-hour customer-service window route to SMS when the requested channel is WhatsApp/auto.
+- Follow-up scheduled, sent, and failed states create normal REST notifications for the agent/user.
+- STOP/opt-out cancels pending automated follow-ups and marks existing manual reminders as sent/stopped.
 ## CURRENT NOTIFICATION SYSTEM
 
 Updated on 2026-09-15:

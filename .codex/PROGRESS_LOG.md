@@ -681,3 +681,16 @@ Validation run:
 - QR image data is generated per request and not stored in the database.
 - Added `qrcode[pil]` dependency.
 - Added account tests for timezone update/validation and QR fields on assigned/pending Chesera number responses.
+
+## 2026-10-07 - Automated Follow-up Sequence
+
+- Added `crm.AutomatedFollowUp` for customer-facing automated follow-up messages while leaving the existing manual `FollowUpReminder` model untouched.
+- Added Day 1, Day 3, Day 7, and Day 14 follow-up scheduling for newly auto-captured inbound Sent.dm leads.
+- Added backend-controlled follow-up message templates with STOP opt-out language.
+- Added due follow-up sending through `sentdm.tasks.send_due_automated_follow_ups_task`.
+- Registered a Celery beat schedule to run due automated follow-ups every minute.
+- Updated follow-up channel policy so WhatsApp/auto follow-ups outside the 24-hour customer-service window route to SMS.
+- Added follow-up scheduled/sent/failed notification types and templates for normal REST notifications.
+- STOP/opt-out now cancels pending automated follow-up messages in addition to stopping manual reminders.
+- Added regression tests for scheduling, STOP cancellation, send success notification, send failure notification, and WhatsApp-to-SMS follow-up routing.
+- Verification note: `python -m compileall -q crm sentdm notifications cheshara_config` passed. Focused Django tests could not run in the current workspace because global Python is missing `django_extensions`; restore/install the project venv to run the full test suite.

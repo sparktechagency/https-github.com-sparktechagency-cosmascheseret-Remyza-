@@ -18,8 +18,8 @@ from business.models import PhoneNumber, PhoneNumberStatus
 from communications.choices import ConversationStatus, MessageDirection, MessageStatus
 from communications.choices import MessageTemplateType
 from communications.models import Conversation, Message, StaticMessageTemplate
-from crm.choices import LeadActivityType, LeadSource, LeadStage
-from crm.models import Contact, FollowUpReminder, Lead, LeadActivity
+from crm.choices import AutomatedFollowUpStatus, LeadActivityType, LeadSource, LeadStage
+from crm.models import AutomatedFollowUp, Contact, FollowUpReminder, Lead, LeadActivity
 
 from .choices import SentDMChannel, SentDMCampaignStatus, SentDMMessageDirection, SentDMMessageStatus, SentDMProfileStatus, SentDMWebhookEventStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from .client import SentDMClient, SentDMClientError
@@ -536,6 +536,13 @@ def normalize_message_status(response):
 WHATSAPP_CUSTOMER_SERVICE_WINDOW_HOURS = 24
 FOLLOW_UP_MESSAGE_PURPOSE = "follow_up"
 REPLY_MESSAGE_PURPOSE = "reply"
+AUTOMATED_FOLLOW_UP_DAYS = (1, 3, 7, 14)
+AUTOMATED_FOLLOW_UP_TEMPLATES = {
+    1: "Hi [Name], this is [Business Name]. Just following up on your recent message. Are you still looking for help with this? Reply STOP to opt out.",
+    3: "[Business Name]: Checking in to see if you still need help with your request. Reply when you are ready, or reply STOP to opt out.",
+    7: "Hi [Name], this is [Business Name]. We are following up on your earlier message. Let us know if you would still like help. Reply STOP to opt out.",
+    14: "[Business Name]: This is our final follow-up about your request. If you still need help, reply here anytime. Reply STOP to opt out.",
+}
 
 
 def lead_has_active_whatsapp_window(lead, now=None):
@@ -551,6 +558,10 @@ def resolve_outbound_channel(*, profile=None, requested_channel=SentDMChannel.AU
         raise ValidationError({"channel": "Unsupported Sent.dm channel."})
 
     agent_whatsapp_active = is_agent_whatsapp_active(profile)
+
+    if purpose == FOLLOW_UP_MESSAGE_PURPOSE and channel in {SentDMChannel.AUTO, SentDMChannel.WHATSAPP}:
+        if not lead_has_active_whatsapp_window(lead, now=now):
+            return SentDMChannel.SMS
 
     if channel == SentDMChannel.AUTO and profile and not agent_whatsapp_active:
         return SentDMChannel.SMS
@@ -568,6 +579,77 @@ def resolve_outbound_channel(*, profile=None, requested_channel=SentDMChannel.AU
             return SentDMChannel.SMS
 
     return channel
+
+
+def get_follow_up_contact_name(lead):
+    if getattr(lead, "full_name", ""):
+        return lead.full_name
+    contact = getattr(lead, "contact", None)
+    if contact and contact.full_name:
+        return contact.full_name
+    return "there"
+
+
+def render_automated_follow_up_message(followup):
+    lead = followup.lead
+    business_name = getattr(followup.organization, "name", "") or "Chesera"
+    contact_name = get_follow_up_contact_name(lead)
+    template = AUTOMATED_FOLLOW_UP_TEMPLATES.get(followup.sequence_day, AUTOMATED_FOLLOW_UP_TEMPLATES[14])
+    return (
+        template.replace("[Name]", contact_name)
+        .replace("[Business Name]", business_name)
+        .strip()
+    )
+
+
+def normalize_follow_up_requested_channel(channel):
+    channel_value = (channel or SentDMChannel.SMS).strip().lower()
+    if channel_value == SentDMChannel.WHATSAPP:
+        return SentDMChannel.WHATSAPP
+    if channel_value == SentDMChannel.RCS:
+        return SentDMChannel.RCS
+    return SentDMChannel.SMS
+
+
+def schedule_automated_follow_ups_for_lead(lead, requested_channel="sms", base_time=None):
+    if not lead or lead.is_opted_out:
+        return []
+
+    base_time = base_time or lead.last_incoming_at or timezone.now()
+    requested_channel = normalize_follow_up_requested_channel(requested_channel)
+    created_followups = []
+
+    for sequence_day in AUTOMATED_FOLLOW_UP_DAYS:
+        followup, created = AutomatedFollowUp.objects.get_or_create(
+            lead=lead,
+            sequence_day=sequence_day,
+            defaults={
+                "organization": lead.organization,
+                "scheduled_time": base_time + timedelta(days=sequence_day),
+                "requested_channel": requested_channel,
+                "metadata": {"source": "sentdm_auto_capture"},
+            },
+        )
+        if created:
+            created_followups.append(followup)
+
+    if created_followups:
+        LeadActivity.objects.create(
+            lead=lead,
+            activity_type=LeadActivityType.FOLLOW_UP_SCHEDULED,
+            title="Automated follow-up sequence scheduled",
+            description="Chesera scheduled backend-controlled follow-ups for Day 1, Day 3, Day 7, and Day 14.",
+            metadata={
+                "followup_ids": [str(item.id) for item in created_followups],
+                "sequence_days": list(AUTOMATED_FOLLOW_UP_DAYS),
+                "requested_channel": requested_channel,
+            },
+        )
+        from notifications.services import NotificationTemplates, safe_notify
+
+        safe_notify(NotificationTemplates.automated_followups_scheduled, lead, created_followups)
+
+    return created_followups
 
 
 def send_sentdm_message(*, user, to, text, profile=None, channel="auto", idempotency_prefix="message", purpose="direct", lead=None):
@@ -620,6 +702,179 @@ def send_live_message(*, user, to, text, profile=None, channel="auto", purpose="
         purpose=purpose,
         lead=lead,
     )
+
+
+def get_active_conversation_for_lead(lead):
+    return Conversation.objects.filter(
+        organization=lead.organization,
+        lead=lead,
+        status=ConversationStatus.ACTIVE,
+    ).order_by("-last_message_at", "-created_at").first()
+
+
+def get_follow_up_profile(followup):
+    profile = getattr(followup.organization, "sentdm_profile", None)
+    if profile:
+        return profile
+    return SentDMProfile.objects.filter(organization=followup.organization).first()
+
+
+def fail_automated_follow_up(followup, error_message):
+    now = timezone.now()
+    followup.follow_up_status = AutomatedFollowUpStatus.FAILED
+    followup.failed_at = now
+    followup.error_message = str(error_message)
+    followup.save(update_fields=["follow_up_status", "failed_at", "error_message", "updated_at"])
+    LeadActivity.objects.create(
+        lead=followup.lead,
+        activity_type=LeadActivityType.FOLLOW_UP_FAILED,
+        title=f"Day {followup.sequence_day} follow-up failed",
+        description=str(error_message),
+        metadata={"followup_id": str(followup.id), "sequence_day": followup.sequence_day},
+    )
+    from notifications.services import NotificationTemplates, safe_notify
+
+    safe_notify(NotificationTemplates.automated_followup_failed, followup)
+    return {"sent": False, "followup_id": followup.id, "error": str(error_message)}
+
+
+def send_automated_follow_up(followup):
+    if followup.follow_up_status != AutomatedFollowUpStatus.SCHEDULED:
+        return {"sent": False, "followup_id": followup.id, "reason": "not_scheduled"}
+
+    lead = followup.lead
+    if lead.is_opted_out:
+        followup.follow_up_status = AutomatedFollowUpStatus.CANCELED
+        followup.error_message = "Lead is opted out."
+        followup.save(update_fields=["follow_up_status", "error_message", "updated_at"])
+        return {"sent": False, "followup_id": followup.id, "reason": "lead_opted_out"}
+
+    profile = get_follow_up_profile(followup)
+    if not profile or not profile.phone_number:
+        return fail_automated_follow_up(followup, "Chesera SMS/RCS number is not assigned for this lead's organization.")
+
+    conversation = get_active_conversation_for_lead(lead)
+    if not conversation:
+        return fail_automated_follow_up(followup, "No active conversation found for this lead.")
+
+    try:
+        channel = resolve_outbound_channel(
+            profile=profile,
+            requested_channel=followup.requested_channel or SentDMChannel.SMS,
+            purpose=FOLLOW_UP_MESSAGE_PURPOSE,
+            lead=lead,
+        )
+        text = render_automated_follow_up_message(followup)
+        response = SentDMClient().send_message(
+            to=lead.contact_number,
+            text=text,
+            profile_id=profile.profile_id,
+            channel=channel,
+            idempotency_key=f"chesera-followup-{followup.id}",
+        )
+    except (ImproperlyConfigured, SentDMClientError, ValidationError) as exc:
+        return fail_automated_follow_up(followup, exc)
+
+    now = timezone.now()
+    message_id = extract_first_message_id(response) or f"sentdm-followup-{followup.id}"
+    sentdm_status = normalize_message_status(response)
+    from_number = profile.whatsapp_phone_number if channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number
+
+    SentDMMessage.objects.create(
+        organization=followup.organization,
+        profile=profile,
+        lead=lead,
+        conversation=conversation,
+        sent_message_id=message_id,
+        direction=SentDMMessageDirection.OUTBOUND,
+        channel=channel,
+        from_number=from_number,
+        to_number=lead.contact_number,
+        body=text,
+        status=sentdm_status,
+        sandbox=getattr(settings, "SENTDM_SANDBOX_MODE", True),
+        raw_response=response,
+    )
+    Message.objects.get_or_create(
+        provider_message_sid=message_id,
+        defaults={
+            "lead": lead,
+            "conversation": conversation,
+            "direction": MessageDirection.OUTBOUND,
+            "sender": from_number[:20],
+            "recipient": lead.contact_number[:20],
+            "content": text,
+            "provider_status": sentdm_status,
+            "status": MessageStatus.QUEUED if sentdm_status == SentDMMessageStatus.QUEUED else MessageStatus.SENT,
+            "metadata": {
+                "source": "sentdm",
+                "automated_followup": True,
+                "followup_id": str(followup.id),
+                "sequence_day": followup.sequence_day,
+                "channel": channel,
+                "requested_channel": followup.requested_channel,
+            },
+        },
+    )
+
+    followup.follow_up_status = AutomatedFollowUpStatus.SENT
+    followup.resolved_channel = channel
+    followup.message_body = text
+    followup.sentdm_message_id = message_id
+    followup.sent_at = now
+    followup.error_message = ""
+    followup.save(
+        update_fields=[
+            "follow_up_status",
+            "resolved_channel",
+            "message_body",
+            "sentdm_message_id",
+            "sent_at",
+            "error_message",
+            "updated_at",
+        ]
+    )
+
+    lead.last_message_at = now
+    lead.last_outgoing_at = now
+    lead.save(update_fields=["last_message_at", "last_outgoing_at", "updated_at"])
+    conversation.total_messages += 1
+    conversation.last_message_at = now
+    conversation.save(update_fields=["total_messages", "last_message_at", "updated_at"])
+
+    LeadActivity.objects.create(
+        lead=lead,
+        activity_type=LeadActivityType.FOLLOW_UP_SENT,
+        title=f"Day {followup.sequence_day} follow-up sent",
+        description="Chesera sent an automated backend-controlled follow-up message.",
+        metadata={
+            "followup_id": str(followup.id),
+            "sequence_day": followup.sequence_day,
+            "channel": channel,
+            "sentdm_message_id": message_id,
+        },
+    )
+    from notifications.services import NotificationTemplates, safe_notify
+
+    safe_notify(NotificationTemplates.automated_followup_sent, followup)
+    return {"sent": True, "followup_id": followup.id, "message_id": message_id, "channel": channel}
+
+
+def send_due_automated_follow_ups(limit=50):
+    due_followups = (
+        AutomatedFollowUp.objects.select_related("organization", "organization__owner", "lead", "lead__contact")
+        .filter(
+            follow_up_status=AutomatedFollowUpStatus.SCHEDULED,
+            scheduled_time__lte=timezone.now(),
+            lead__is_opted_out=False,
+        )
+        .order_by("scheduled_time")[:limit]
+    )
+
+    results = []
+    for followup in due_followups:
+        results.append(send_automated_follow_up(followup))
+    return {"processed": len(results), "results": results}
 
 
 WEBHOOK_VALUE_CONTAINERS = ("payload", "data", "message", "event", "contact", "sender", "recipient")
@@ -769,6 +1024,11 @@ def get_or_create_lead_and_conversation(profile, details):
         )
         from notifications.services import NotificationTemplates, safe_notify
         safe_notify(NotificationTemplates.new_lead_captured, lead, details.get("channel", "auto"))
+        schedule_automated_follow_ups_for_lead(
+            lead,
+            requested_channel=details.get("channel", SentDMChannel.SMS),
+            base_time=now,
+        )
     lead.last_message_at = now
     lead.last_incoming_at = now
     lead_update_fields = ["last_message_at", "last_incoming_at", "updated_at"]
@@ -1040,6 +1300,14 @@ def apply_opt_out(lead, keyword):
         updated_at=now,
     )
     FollowUpReminder.objects.filter(lead=lead, is_sent=False).update(is_sent=True, updated_at=now)
+    AutomatedFollowUp.objects.filter(
+        lead=lead,
+        follow_up_status=AutomatedFollowUpStatus.SCHEDULED,
+    ).update(
+        follow_up_status=AutomatedFollowUpStatus.CANCELED,
+        error_message=f"Lead opted out with {keyword}.",
+        updated_at=now,
+    )
 
 
 def process_sentdm_webhook_event(event):
