@@ -237,7 +237,13 @@ Updated on 2026-10-08:
 - Swagger should document the actual API response envelope, not only the inner model serializer.
 - Response serializers have been added for key auth, account, AI, welcome-message, Sent.dm profile, and WhatsApp config endpoints.
 - `SPECTACULAR_SETTINGS["GENERIC_ADDITIONAL_PROPERTIES"] = None` is enabled so generic JSON/object fields no longer show noisy `additionalProp1` placeholder fields in Swagger.
+- `GET /api/v1/me/` documents the full current-user response envelope, including the nested user object, active subscription flags/details, and free-trial details.
+- Paginated list endpoints should document the real pagination envelope with `count`, `next`, `previous`, and `results`.
+- CRM contacts, CRM leads, lead inbox, lead conversation messages, notifications, and user subscriptions all use explicit paginated Swagger response serializers.
+- `GET /api/v1/user-subscription/` is paginated at runtime and supports `page` plus `page_size`.
+- Small reference-data lists such as business types and industries are not paginated, but Swagger documents their actual `{ success, count, data }` envelope.
 - Hidden/legacy Twilio endpoints remain outside the current cleanup scope unless they are re-enabled.
+- `GET /api/v1/me/plan-and-progress/` documents its full nested response body, including subscription status, organization, Sent.dm compliance readiness, Sender Profile, 10DLC campaign, number assignment, WhatsApp status, messaging activation, and onboarding progress steps.
 ## CURRENT NOTIFICATION SYSTEM
 
 Updated on 2026-09-15:

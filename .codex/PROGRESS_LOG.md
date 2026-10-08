@@ -708,3 +708,13 @@ Validation run:
 - Added explicit response envelope serializers for auth OTP/signup/login responses, current-user update, Chesera-number response, AI structured message response, welcome-message preset responses, Sent.dm current profile, Sent.dm profile actions, and WhatsApp config read response.
 - Updated `@extend_schema` response mappings so Swagger shows the real `{ success, message, data }` shape where those endpoints return that envelope.
 - Verification note: `python -m compileall -q accounts ai communications sentdm cheshara_config` passed. `python manage.py spectacular --file tmp_schema.yml --validate` is still blocked in this local workspace because global Python is missing `django_extensions`; run it after restoring/installing the project venv.
+
+## 2026-10-08 - Swagger Current User and Pagination Cleanup
+
+- Fixed `GET /api/v1/me/` Swagger response documentation by adding explicit current-user response serializers for the returned `{ success, message, data }` envelope.
+- Fixed `GET /api/v1/me/plan-and-progress/` Swagger response documentation by adding an explicit nested response serializer for plan status, Sent.dm onboarding status, number assignment, WhatsApp status, messaging activation, and progress steps.
+- Added paginated response serializers for CRM contacts, lead inbox, lead conversation messages, notifications, and user subscriptions.
+- Updated Swagger list responses so paginated endpoints show `count`, `next`, `previous`, and `results` instead of raw arrays.
+- Updated `GET /api/v1/user-subscription/` to use actual page/page_size pagination at runtime.
+- Updated reference-data list schemas for business types and industries to show their real `{ success, count, data }` response envelope.
+- Verification note: `python -m compileall -q accounts crm notifications subscription core` and `python -m compileall -q accounts` passed. Full OpenAPI validation is still blocked locally because global Python is missing `django_extensions`; run `python manage.py spectacular --file tmp_schema.yml --validate` after restoring/installing the project venv.

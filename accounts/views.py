@@ -32,6 +32,8 @@ from .serializers import (
     CurrentUserSerializer,
     CurrentUserCheseraNumberSerializer,
     CurrentUserCheseraNumberResponseSerializer,
+    CurrentUserPlanAndProgressResponseSerializer,
+    CurrentUserResponseSerializer,
     CurrentUserUpdateResponseSerializer,
 )
 from django.db import transaction
@@ -800,7 +802,7 @@ CurrentUserAPIView = extend_schema_view(
         tags=["User Account"],
         summary="Get current user",
         description="Returns the authenticated user's profile, subscription state, and related onboarding metadata.",
-        responses={200: OpenApiResponse(description="User account data returned successfully."), 401: OpenApiResponse(description="Authentication required.")},
+        responses={200: CurrentUserResponseSerializer, 401: OpenApiResponse(description="Authentication required.")},
     ),
     patch=extend_schema(
         tags=["User Account"],
@@ -823,7 +825,7 @@ CurrentUserPlanAndProgressAPIView = extend_schema_view(
         summary="Get plan and onboarding progress",
         description="Returns the paid subscription status and current setup progress for the authenticated user.",
         responses={
-            200: OpenApiResponse(description="Plan and progress returned successfully."),
+            200: CurrentUserPlanAndProgressResponseSerializer,
             404: OpenApiResponse(description="No active paid subscription found."),
         },
     ),

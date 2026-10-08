@@ -5,6 +5,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, OTPVerification
 from .choices import UserType
+from business.serializers import OrganizationSerializer
 
 
 class ClientSignupSerializer(serializers.Serializer):
@@ -254,6 +255,163 @@ class CurrentUserUpdateResponseSerializer(serializers.Serializer):
     data = CurrentUserSerializer()
 
 
+class CurrentUserSubscriptionSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    uuid = serializers.CharField()
+    user = serializers.IntegerField()
+    organization = serializers.IntegerField(allow_null=True)
+    product_id = serializers.CharField()
+    plan_type = serializers.CharField(allow_blank=True, allow_null=True)
+    medium = serializers.CharField()
+    purchase_token = serializers.CharField(allow_blank=True, allow_null=True)
+    transaction_id = serializers.CharField(allow_blank=True, allow_null=True)
+    original_transaction_id = serializers.CharField(allow_blank=True, allow_null=True)
+    order_id = serializers.CharField(allow_blank=True, allow_null=True)
+    store_environment = serializers.CharField(allow_blank=True, allow_null=True)
+    store_status = serializers.CharField(allow_blank=True, allow_null=True)
+    is_subscription_active = serializers.BooleanField(allow_null=True)
+    purchase_date = serializers.DateTimeField(allow_null=True)
+    expiry_date = serializers.DateTimeField(allow_null=True)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    currency_code = serializers.CharField(allow_blank=True, allow_null=True)
+    verification_payload = serializers.JSONField()
+    app_bundle_id = serializers.CharField()
+    is_active = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class CurrentUserFreeTrialNumberSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False)
+    user = serializers.IntegerField(required=False)
+    free_trail = serializers.IntegerField(required=False)
+    trail_number = serializers.CharField(required=False)
+    usages_count = serializers.IntegerField(required=False)
+    end_at = serializers.DateTimeField(required=False, allow_null=True)
+    created_at = serializers.DateTimeField(required=False)
+    updated_at = serializers.DateTimeField(required=False)
+
+
+class CurrentUserDataSerializer(serializers.Serializer):
+    user = CurrentUserSerializer()
+    has_active_subscription = serializers.BooleanField()
+    free_trail_claimed = serializers.BooleanField()
+    free_trial_session = serializers.CharField(allow_null=True)
+    plan_type = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    expires_at = serializers.DateTimeField(required=False, allow_null=True)
+    active_subscription = CurrentUserSubscriptionSummarySerializer(required=False, allow_null=True)
+    free_trial_number = CurrentUserFreeTrialNumberSerializer(required=False, allow_null=True)
+
+
+class CurrentUserResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = CurrentUserDataSerializer()
+
+
 class CurrentUserCheseraNumberResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     data = CurrentUserCheseraNumberSerializer()
+
+
+class UserPlanProgressStepSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    completed = serializers.BooleanField()
+    percentage = serializers.IntegerField()
+    description = serializers.CharField(allow_blank=True)
+    key = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.CharField(required=False, allow_blank=True)
+
+
+class UserPlanProgressSummarySerializer(serializers.Serializer):
+    total_steps = serializers.IntegerField()
+    completed_steps = serializers.IntegerField()
+    percentage = serializers.IntegerField()
+    steps = UserPlanProgressStepSerializer(many=True)
+
+
+class SentDMComplianceReadinessResponseSerializer(serializers.Serializer):
+    ready = serializers.BooleanField()
+    missing_fields = serializers.ListField(child=serializers.CharField())
+    messages = serializers.DictField(child=serializers.CharField())
+    profile_id = serializers.CharField(required=False, allow_blank=True)
+    sample_message_count = serializers.IntegerField()
+    messaging_use_case_us = serializers.CharField(required=False, allow_blank=True)
+
+
+class UserPlanSentDMProfileSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    profile_id = serializers.CharField()
+    name = serializers.CharField()
+    status = serializers.CharField()
+    phone_number = serializers.CharField(allow_blank=True, allow_null=True)
+    whatsapp_phone_number = serializers.CharField(allow_blank=True, allow_null=True)
+    whatsapp_connection_source = serializers.CharField()
+    whatsapp_connection_status = serializers.CharField()
+    whatsapp_connection_error = serializers.CharField(allow_blank=True)
+    is_agent_whatsapp_active = serializers.BooleanField()
+    sandbox = serializers.BooleanField()
+
+
+class UserPlanSentDMCampaignSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    campaign_id = serializers.CharField(allow_blank=True)
+    name = serializers.CharField()
+    status = serializers.CharField()
+    submitted_to_tcr = serializers.BooleanField()
+    sandbox = serializers.BooleanField()
+
+
+class UserPlanSentDMNumberSerializer(serializers.Serializer):
+    assigned = serializers.BooleanField()
+    phone_number = serializers.CharField(allow_null=True)
+    status = serializers.CharField()
+    number_assignment_status = serializers.CharField()
+    message = serializers.CharField()
+
+
+class UserPlanWhatsAppStatusSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    source = serializers.CharField()
+    active = serializers.BooleanField()
+    phone_number = serializers.CharField(allow_null=True)
+    error = serializers.CharField(allow_blank=True)
+    message = serializers.CharField()
+
+
+class UserPlanSMSRCSActivationSerializer(serializers.Serializer):
+    number_assigned = serializers.BooleanField()
+    number_assignment_status = serializers.CharField()
+    phone_number = serializers.CharField(allow_null=True)
+    profile_status = serializers.CharField(allow_null=True)
+    campaign_status = serializers.CharField(allow_null=True)
+    active = serializers.BooleanField()
+
+
+class UserMessagingActivationSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    message = serializers.CharField()
+    sms_rcs = UserPlanSMSRCSActivationSerializer()
+    whatsapp = UserPlanWhatsAppStatusSerializer()
+
+
+class UserPlanAndProgressDataSerializer(serializers.Serializer):
+    has_active_subscription = serializers.BooleanField()
+    plan_type = serializers.CharField(allow_blank=True, allow_null=True)
+    expires_at = serializers.DateTimeField(allow_null=True)
+    active_subscription = CurrentUserSubscriptionSummarySerializer(allow_null=True)
+    organization = OrganizationSerializer(allow_null=True)
+    sentdm_compliance = SentDMComplianceReadinessResponseSerializer(allow_null=True)
+    sentdm_profile = UserPlanSentDMProfileSerializer(allow_null=True)
+    sentdm_campaign = UserPlanSentDMCampaignSerializer(allow_null=True)
+    number_assignment_status = serializers.CharField()
+    sentdm_number = UserPlanSentDMNumberSerializer()
+    whatsapp = UserPlanWhatsAppStatusSerializer()
+    messaging_activation = UserMessagingActivationSerializer()
+    progress = UserPlanProgressSummarySerializer()
+
+
+class CurrentUserPlanAndProgressResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = UserPlanAndProgressDataSerializer()
