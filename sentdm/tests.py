@@ -600,6 +600,40 @@ class SentDMWhatsAppConnectionStateTests(TestCase):
         self.assertTrue(response.data["data"]["profile"]["is_agent_whatsapp_active"])
         mocked_connect.assert_called_once()
 
+    def test_whatsapp_connect_endpoint_get_returns_saved_config(self):
+        self.organization.sentdm_whatsapp_waba_id = "123456789012345"
+        self.organization.sentdm_whatsapp_phone_number_id = "987654321098765"
+        self.organization.sentdm_whatsapp_access_token = "EAAxxxxxxxxxxxxxxx"
+        self.organization.save(
+            update_fields=[
+                "sentdm_whatsapp_waba_id",
+                "sentdm_whatsapp_phone_number_id",
+                "sentdm_whatsapp_access_token",
+                "updated_at",
+            ]
+        )
+        SentDMProfile.objects.create(
+            user=self.user,
+            organization=self.organization,
+            profile_id="profile_endpoint_config",
+            name="Endpoint Config Profile",
+        )
+        request = self.factory.get("/api/v1/sentdm/profiles/whatsapp/connect/")
+        force_authenticate(request, user=self.user)
+
+        response = SentDMWhatsAppConnectAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["data"],
+            {
+                "profile_id": "profile_endpoint_config",
+                "waba_id": "123456789012345",
+                "phone_number_id": "987654321098765",
+                "access_token": "EAAxxxxxxxxxxxxxxx",
+            },
+        )
+
 class SentDMWhatsAppPayloadTests(SimpleTestCase):
     def test_build_profile_payload_includes_optional_whatsapp_business_account(self):
         class User:

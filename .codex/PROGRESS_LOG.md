@@ -694,3 +694,10 @@ Validation run:
 - STOP/opt-out now cancels pending automated follow-up messages in addition to stopping manual reminders.
 - Added regression tests for scheduling, STOP cancellation, send success notification, send failure notification, and WhatsApp-to-SMS follow-up routing.
 - Verification note: `python -m compileall -q crm sentdm notifications cheshara_config` passed. Focused Django tests could not run in the current workspace because global Python is missing `django_extensions`; restore/install the project venv to run the full test suite.
+
+## 2026-10-08 - Sent.dm WhatsApp Config Read API
+
+- Added `GET /api/v1/sentdm/profiles/whatsapp/connect/` beside the existing POST connect endpoint.
+- The GET response returns the authenticated paid user's saved WhatsApp config: `profile_id`, `waba_id`, `phone_number_id`, and `access_token`.
+- Added `SentDMWhatsAppConfigSerializer` for Swagger documentation.
+- Added a regression test for returning saved WhatsApp config from the endpoint.

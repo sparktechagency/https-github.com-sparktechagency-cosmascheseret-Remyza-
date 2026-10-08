@@ -216,6 +216,19 @@ Updated on 2026-10-07:
 - Follow-ups outside WhatsApp's 24-hour customer-service window route to SMS when the requested channel is WhatsApp/auto.
 - Follow-up scheduled, sent, and failed states create normal REST notifications for the agent/user.
 - STOP/opt-out cancels pending automated follow-ups and marks existing manual reminders as sent/stopped.
+
+## CURRENT SENT.DM WHATSAPP CONFIG API
+
+Updated on 2026-10-08:
+
+- `POST /api/v1/sentdm/profiles/whatsapp/connect/` connects or updates the agent-owned WhatsApp Business configuration.
+- `GET /api/v1/sentdm/profiles/whatsapp/connect/` returns the authenticated paid user's saved WhatsApp configuration:
+  - `profile_id`
+  - `waba_id`
+  - `phone_number_id`
+  - `access_token`
+- WhatsApp config is stored on the user's `Organization`; `profile_id` comes from the current local `SentDMProfile` when available.
+- The GET endpoint is for paid/authenticated users and returns blank strings for missing saved values.
 ## CURRENT NOTIFICATION SYSTEM
 
 Updated on 2026-09-15:

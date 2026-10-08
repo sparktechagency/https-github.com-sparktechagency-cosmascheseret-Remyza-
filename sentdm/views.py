@@ -193,6 +193,26 @@ class SentDMWhatsAppConnectAPIView(APIView):
 
     @extend_schema(
         tags=["Sent.dm"],
+        summary="Get agent WhatsApp config",
+        description="Returns the authenticated user's saved Meta WhatsApp Business configuration for their Sent.dm Sender Profile. Requires an active paid subscription.",
+        responses={200: SentDMWhatsAppConfigSerializer, 404: OpenApiResponse(description="Business profile not found.")},
+    )
+    def get(self, request):
+        organization = get_organization_for_user(request.user)
+        if not organization:
+            raise NotFound("Business profile not found for current user.")
+
+        profile = get_profile_for_user(request.user)
+        data = {
+            "profile_id": profile.profile_id if profile else "",
+            "waba_id": organization.sentdm_whatsapp_waba_id or "",
+            "phone_number_id": organization.sentdm_whatsapp_phone_number_id or "",
+            "access_token": organization.sentdm_whatsapp_access_token or "",
+        }
+        return Response({"success": True, "data": data}, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=["Sent.dm"],
         summary="Connect agent WhatsApp",
         description="Connects the authenticated agent's own Meta WhatsApp Business Account to their Sent.dm Sender Profile. WhatsApp remains inactive until Sent.dm accepts the WABA ID, phone number ID, and access token.",
         request=SentDMWhatsAppConnectSerializer,

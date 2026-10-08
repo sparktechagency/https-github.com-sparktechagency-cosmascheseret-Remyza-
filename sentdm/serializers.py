@@ -47,6 +47,13 @@ class SentDMWhatsAppConnectSerializer(serializers.Serializer):
     access_token = serializers.CharField(write_only=True)
 
 
+class SentDMWhatsAppConfigSerializer(serializers.Serializer):
+    profile_id = serializers.CharField(allow_blank=True)
+    waba_id = serializers.CharField(allow_blank=True)
+    phone_number_id = serializers.CharField(allow_blank=True)
+    access_token = serializers.CharField(allow_blank=True)
+
+
 class SentDMProfileCompleteSerializer(serializers.Serializer):
     profile_id = serializers.CharField(required=False, allow_blank=True)
 
