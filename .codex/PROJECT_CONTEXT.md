@@ -229,6 +229,15 @@ Updated on 2026-10-08:
   - `access_token`
 - WhatsApp config is stored on the user's `Organization`; `profile_id` comes from the current local `SentDMProfile` when available.
 - The GET endpoint is for paid/authenticated users and returns blank strings for missing saved values.
+
+## CURRENT SWAGGER / OPENAPI DOCUMENTATION STANDARD
+
+Updated on 2026-10-08:
+
+- Swagger should document the actual API response envelope, not only the inner model serializer.
+- Response serializers have been added for key auth, account, AI, welcome-message, Sent.dm profile, and WhatsApp config endpoints.
+- `SPECTACULAR_SETTINGS["GENERIC_ADDITIONAL_PROPERTIES"] = None` is enabled so generic JSON/object fields no longer show noisy `additionalProp1` placeholder fields in Swagger.
+- Hidden/legacy Twilio endpoints remain outside the current cleanup scope unless they are re-enabled.
 ## CURRENT NOTIFICATION SYSTEM
 
 Updated on 2026-09-15:

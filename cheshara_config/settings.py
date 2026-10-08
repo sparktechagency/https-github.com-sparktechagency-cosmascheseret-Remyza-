@@ -90,6 +90,7 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Chesera API',
     'DESCRIPTION': 'API documentation for Chesera project',
     'VERSION': '1.0.0',
+    'GENERIC_ADDITIONAL_PROPERTIES': None,
     'TAGS': [
         {'name': 'Auth - Admin', 'description': 'Admin authentication endpoints.'},
         {'name': 'Auth - User', 'description': 'Client OTP authentication endpoints.'},
@@ -102,7 +103,8 @@ SPECTACULAR_SETTINGS = {
         {'name': 'User Subscriptions', 'description': 'Apple/Google in-app subscription records and admin subscription review.'},
         {'name': 'Reference Data', 'description': 'Business type and industry reference data.'},
         {'name': 'API Schema', 'description': 'OpenAPI schema endpoint used by Swagger and ReDoc.'},
-    ],    'SECURITY': [{'BearerAuth': []}],
+    ],    
+    'SECURITY': [{'BearerAuth': []}],
     'COMPONENTS': {
         'SECURITY_SCHEMES': {
             'BearerAuth': {
@@ -111,6 +113,11 @@ SPECTACULAR_SETTINGS = {
                 'bearerFormat': 'JWT',
             }
         }
+    },
+    # Add Swagger UI settings to sort tags alphabetically
+    'SWAGGER_UI_SETTINGS': {
+        'tagsSorter': 'alpha',      # Sorts tag groups alphabetically
+        'operationsSorter': 'alpha',# (Optional) Sorts endpoints inside each tag alphabetically
     },
 }
 

@@ -701,3 +701,10 @@ Validation run:
 - The GET response returns the authenticated paid user's saved WhatsApp config: `profile_id`, `waba_id`, `phone_number_id`, and `access_token`.
 - Added `SentDMWhatsAppConfigSerializer` for Swagger documentation.
 - Added a regression test for returning saved WhatsApp config from the endpoint.
+
+## 2026-10-08 - Swagger Schema Cleanup
+
+- Added `SPECTACULAR_SETTINGS["GENERIC_ADDITIONAL_PROPERTIES"] = None` to remove noisy `additionalProp` placeholders for generic object/JSON schema fields.
+- Added explicit response envelope serializers for auth OTP/signup/login responses, current-user update, Chesera-number response, AI structured message response, welcome-message preset responses, Sent.dm current profile, Sent.dm profile actions, and WhatsApp config read response.
+- Updated `@extend_schema` response mappings so Swagger shows the real `{ success, message, data }` shape where those endpoints return that envelope.
+- Verification note: `python -m compileall -q accounts ai communications sentdm cheshara_config` passed. `python manage.py spectacular --file tmp_schema.yml --validate` is still blocked in this local workspace because global Python is missing `django_extensions`; run it after restoring/installing the project venv.

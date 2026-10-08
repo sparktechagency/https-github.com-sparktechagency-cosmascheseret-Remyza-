@@ -6,7 +6,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .serializers import (
+    WelcomeMessagePresetResponseSerializer,
     WelcomeMessageSelectionSerializer,
+    WelcomeMessageSelectionResponseSerializer,
     WelcomeMessageTemplateSerializer,
     WelcomeTemplatePresetSerializer,
     get_selected_welcome_template,
@@ -41,7 +43,7 @@ class WelcomeMessagePresetAPIView(APIView):
             "plus the authenticated user's selected welcome template when configured."
         ),
         parameters=[OpenApiParameter("template", str, required=False, description="Preset key: professional, friendly, or casual.")],
-        responses={200: WelcomeTemplatePresetSerializer(many=True), 400: OpenApiResponse(description="Invalid template key.")},
+        responses={200: WelcomeMessagePresetResponseSerializer, 400: OpenApiResponse(description="Invalid template key.")},
     )
     def get(self, request):
         template_key = (request.query_params.get("template") or "").strip().lower()
@@ -78,7 +80,7 @@ class WelcomeMessagePresetAPIView(APIView):
         summary="Select welcome message preset",
         description="Saves one backend-owned welcome message preset for the authenticated user. Free-form welcome text is not accepted.",
         request=WelcomeMessageSelectionSerializer,
-        responses={200: WelcomeMessageTemplateSerializer, 400: OpenApiResponse(description="Invalid template key or missing business profile.")},
+        responses={200: WelcomeMessageSelectionResponseSerializer, 400: OpenApiResponse(description="Invalid template key or missing business profile.")},
     )
     def put(self, request):
         return self.select_template(request)
@@ -88,7 +90,7 @@ class WelcomeMessagePresetAPIView(APIView):
         summary="Update selected welcome message preset",
         description="Updates the selected backend-owned welcome message preset. Free-form welcome text is not accepted.",
         request=WelcomeMessageSelectionSerializer,
-        responses={200: WelcomeMessageTemplateSerializer, 400: OpenApiResponse(description="Invalid template key or missing business profile.")},
+        responses={200: WelcomeMessageSelectionResponseSerializer, 400: OpenApiResponse(description="Invalid template key or missing business profile.")},
     )
     def patch(self, request):
         return self.select_template(request)

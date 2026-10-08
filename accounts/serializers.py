@@ -173,3 +173,87 @@ class CurrentUserCheseraNumberSerializer(serializers.Serializer):
     sms_rcs_active = serializers.BooleanField()
     qr_payload = serializers.CharField(allow_null=True)
     qr_code_base64 = serializers.CharField(allow_null=True)
+
+
+class APIMessageResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+
+
+class ClientSignupDataSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+    is_new_user = serializers.BooleanField()
+    user = CurrentUserSerializer()
+
+
+class ClientSignupResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = ClientSignupDataSerializer()
+
+
+class ClientSendOTPDataSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+    is_new_user = serializers.BooleanField()
+
+
+class ClientSendOTPResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = ClientSendOTPDataSerializer()
+
+
+class AuthenticatedUserDataSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    phone_number = serializers.CharField()
+    full_name = serializers.CharField(allow_blank=True)
+    email = serializers.EmailField(allow_blank=True, allow_null=True)
+    city = serializers.CharField(allow_blank=True)
+    country = serializers.CharField(allow_blank=True)
+    country_code = serializers.CharField(allow_blank=True)
+    user_type = serializers.CharField()
+    is_phone_verified = serializers.BooleanField()
+
+
+class ClientVerifyOTPDataSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    business_profile_exists = serializers.BooleanField()
+    user = AuthenticatedUserDataSerializer()
+
+
+class ClientVerifyOTPResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = ClientVerifyOTPDataSerializer()
+
+
+class AdminUserDataSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    email = serializers.EmailField(allow_blank=True, allow_null=True)
+    phone_number = serializers.CharField()
+    full_name = serializers.CharField(allow_blank=True)
+    user_type = serializers.CharField()
+
+
+class AdminLoginDataSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    user = AdminUserDataSerializer()
+
+
+class AdminLoginResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = AdminLoginDataSerializer()
+
+
+class CurrentUserUpdateResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = CurrentUserSerializer()
+
+
+class CurrentUserCheseraNumberResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = CurrentUserCheseraNumberSerializer()

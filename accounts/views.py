@@ -21,12 +21,18 @@ from sentdm.models import SentDMProfile
 from business.serializers import OrganizationSerializer, ProviderAccountSerializer
 from business.models import PhoneNumber
 from .serializers import (
+    AdminLoginResponseSerializer,
     AdminLoginSerializer,
+    ClientSendOTPResponseSerializer,
     ClientSignupSerializer,
+    ClientSignupResponseSerializer,
     ClientSendOTPSerializer,
     ClientVerifyOTPSerializer,
+    ClientVerifyOTPResponseSerializer,
     CurrentUserSerializer,
     CurrentUserCheseraNumberSerializer,
+    CurrentUserCheseraNumberResponseSerializer,
+    CurrentUserUpdateResponseSerializer,
 )
 from django.db import transaction
 from notifications.services import NotificationTemplates, safe_notify
@@ -392,7 +398,7 @@ class CurrentUserCheseraNumberAPIView(APIView):
         tags=["User Chesera Number"],
         summary="Get user's Chesera number",
         description="Returns the authenticated user's dedicated Chesera SMS/RCS number assigned through Sent.dm. Free or pending users receive `assigned=false` with the current activation message.",
-        responses={200: CurrentUserCheseraNumberSerializer},
+        responses={200: CurrentUserCheseraNumberResponseSerializer},
     )
     def get(self, request):
         profile = self.get_profile(request.user)
@@ -718,8 +724,8 @@ ClientSignupAPIView = extend_schema_view(
         description="Creates or updates an unverified client user with full name, email, phone number, city, country, and optional country code, then sends a registration OTP. JWT tokens are returned after OTP verification.",
         request=ClientSignupSerializer,
         responses={
-            201: OpenApiResponse(description="New user created and signup OTP session started."),
-            200: OpenApiResponse(description="Existing unverified user updated and signup OTP resent."),
+            201: ClientSignupResponseSerializer,
+            200: ClientSignupResponseSerializer,
             400: OpenApiResponse(description="Invalid signup payload or verified user already exists."),
         },
     ),
@@ -731,7 +737,7 @@ ClientSendOTPAPIView = extend_schema_view(
         description="Creates or finds a client user by phone number and starts an OTP login session.",
         request=ClientSendOTPSerializer,
         responses={
-            200: OpenApiResponse(description="OTP session created successfully."),
+            200: ClientSendOTPResponseSerializer,
             400: OpenApiResponse(description="Invalid phone number or request payload."),
         },
     ),
@@ -744,7 +750,7 @@ ClientVerifyOTPAPIView = extend_schema_view(
         description="Verifies the latest unused OTP for the phone number and returns JWT access and refresh tokens.",
         request=ClientVerifyOTPSerializer,
         responses={
-            200: OpenApiResponse(description="OTP verified. JWT tokens and user profile returned."),
+            200: ClientVerifyOTPResponseSerializer,
             400: OpenApiResponse(description="OTP not found, expired, already used, or invalid."),
         },
     ),
@@ -757,7 +763,7 @@ AdminLoginAPIView = extend_schema_view(
         description="Authenticates a staff/admin user with phone number and password. Returns JWT access and refresh tokens.",
         request=AdminLoginSerializer,
         responses={
-            200: OpenApiResponse(description="Admin authenticated successfully."),
+            200: AdminLoginResponseSerializer,
             400: OpenApiResponse(description="Invalid credentials or user is not staff."),
         },
     ),
@@ -794,14 +800,14 @@ CurrentUserAPIView = extend_schema_view(
         tags=["User Account"],
         summary="Get current user",
         description="Returns the authenticated user's profile, subscription state, and related onboarding metadata.",
-        responses={200: CurrentUserSerializer, 401: OpenApiResponse(description="Authentication required.")},
+        responses={200: OpenApiResponse(description="User account data returned successfully."), 401: OpenApiResponse(description="Authentication required.")},
     ),
     patch=extend_schema(
         tags=["User Account"],
         summary="Update current user",
         description="Partially updates the authenticated user's profile fields.",
         request=CurrentUserSerializer,
-        responses={200: CurrentUserSerializer, 400: OpenApiResponse(description="Invalid profile data.")},
+        responses={200: CurrentUserUpdateResponseSerializer, 400: OpenApiResponse(description="Invalid profile data.")},
     ),
     delete=extend_schema(
         tags=["User Account"],

@@ -32,6 +32,43 @@ class WelcomeMessageTemplateSerializer(serializers.ModelSerializer):
         return "custom_legacy"
 
 
+class WelcomeMessagePresetListDataSerializer(serializers.Serializer):
+    templates = WelcomeTemplatePresetSerializer(many=True)
+    selected = WelcomeMessageTemplateSerializer(allow_null=True)
+
+
+class WelcomeMessagePresetSingleDataSerializer(serializers.Serializer):
+    template = WelcomeTemplatePresetSerializer()
+    selected = WelcomeMessageTemplateSerializer(allow_null=True)
+
+
+class WelcomeMessagePresetDataSerializer(serializers.Serializer):
+    templates = WelcomeTemplatePresetSerializer(many=True, required=False)
+    template = WelcomeTemplatePresetSerializer(required=False)
+    selected = WelcomeMessageTemplateSerializer(allow_null=True)
+
+
+class WelcomeMessagePresetResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = WelcomeMessagePresetDataSerializer()
+
+
+class WelcomeMessagePresetListResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = WelcomeMessagePresetListDataSerializer()
+
+
+class WelcomeMessagePresetSingleResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = WelcomeMessagePresetSingleDataSerializer()
+
+
+class WelcomeMessageSelectionResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = WelcomeMessageTemplateSerializer()
+
+
 def get_selected_welcome_template(user):
     organization = getattr(user, "organization", None)
     if not organization:
