@@ -178,5 +178,14 @@ class NotificationToggleSerializer(serializers.Serializer):
     value = serializers.BooleanField()
 
 
+class BusinessOnboardingStatusDataSerializer(serializers.Serializer):
+    onboarding_step = serializers.CharField()
+
+
+class BusinessOnboardingStatusResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = BusinessOnboardingStatusDataSerializer()
+
+
 
 

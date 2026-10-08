@@ -713,8 +713,9 @@ Validation run:
 
 - Fixed `GET /api/v1/me/` Swagger response documentation by adding explicit current-user response serializers for the returned `{ success, message, data }` envelope.
 - Fixed `GET /api/v1/me/plan-and-progress/` Swagger response documentation by adding an explicit nested response serializer for plan status, Sent.dm onboarding status, number assignment, WhatsApp status, messaging activation, and progress steps.
+- Fixed `GET /api/v1/me/onboarding-status/` Swagger response documentation by adding an explicit response serializer for the returned business onboarding step.
 - Added paginated response serializers for CRM contacts, lead inbox, lead conversation messages, notifications, and user subscriptions.
 - Updated Swagger list responses so paginated endpoints show `count`, `next`, `previous`, and `results` instead of raw arrays.
 - Updated `GET /api/v1/user-subscription/` to use actual page/page_size pagination at runtime.
 - Updated reference-data list schemas for business types and industries to show their real `{ success, count, data }` response envelope.
-- Verification note: `python -m compileall -q accounts crm notifications subscription core` and `python -m compileall -q accounts` passed. Full OpenAPI validation is still blocked locally because global Python is missing `django_extensions`; run `python manage.py spectacular --file tmp_schema.yml --validate` after restoring/installing the project venv.
+- Verification note: `python -m compileall -q accounts crm notifications subscription core`, `python -m compileall -q accounts`, and `python -m compileall -q business` passed. Full OpenAPI validation is still blocked locally because global Python is missing `django_extensions`; run `python manage.py spectacular --file tmp_schema.yml --validate` after restoring/installing the project venv.

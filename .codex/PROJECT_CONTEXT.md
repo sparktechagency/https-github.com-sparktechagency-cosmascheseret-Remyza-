@@ -244,6 +244,7 @@ Updated on 2026-10-08:
 - Small reference-data lists such as business types and industries are not paginated, but Swagger documents their actual `{ success, count, data }` envelope.
 - Hidden/legacy Twilio endpoints remain outside the current cleanup scope unless they are re-enabled.
 - `GET /api/v1/me/plan-and-progress/` documents its full nested response body, including subscription status, organization, Sent.dm compliance readiness, Sender Profile, 10DLC campaign, number assignment, WhatsApp status, messaging activation, and onboarding progress steps.
+- `GET /api/v1/me/onboarding-status/` documents the real `{ success, data: { onboarding_step } }` response body.
 ## CURRENT NOTIFICATION SYSTEM
 
 Updated on 2026-09-15:
