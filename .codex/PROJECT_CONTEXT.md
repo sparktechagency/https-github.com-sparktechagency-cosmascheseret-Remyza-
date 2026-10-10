@@ -289,6 +289,17 @@ Updated on 2026-10-10:
 - Exportable columns are `user_id`, `full_name`, `email`, `phone`, `business_name`, `business_type`, `plan`, `status`, `messages_sent_count`, `leads_count`, `joined_date`, `last_active`, and `chesera_number`.
 - XLSX export requires `openpyxl`, which is pinned in `requirements.txt`.
 
+## CURRENT PASSWORD CHANGE API
+
+Updated on 2026-10-10:
+
+- `POST /api/v1/me/password/change/` lets any authenticated user, including admins, change their own password.
+- Request fields:
+  - `current_password`
+  - `new_password`
+  - `confirm_new_password`
+- The endpoint verifies the current password, validates the new password with Django password validators, requires confirmation match, updates the password, and stores `last_password_changed_at`.
+
 ## CURRENT SWAGGER / OPENAPI DOCUMENTATION STANDARD
 
 Updated on 2026-10-08:

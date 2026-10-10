@@ -14,6 +14,7 @@ from accounts.views import (
     AdminUserDetailAPIView,
     AdminUserExportCSVAPIView,
     AdminUserListAPIView,
+    ChangePasswordAPIView,
     ClientSignupAPIView,
     ClientVerifyOTPAPIView,
     CurrentUserAPIView,
@@ -180,6 +181,72 @@ class CurrentUserAPIViewTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("timezone", response.data)
+
+
+class ChangePasswordAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = User.objects.create(
+            phone_number="+15556667777",
+            email="password@example.com",
+            full_name="Password User",
+        )
+        self.user.set_password("OldPass123!")
+        self.user.save(update_fields=["password"])
+
+    def test_authenticated_user_can_change_password(self):
+        request = self.factory.post(
+            "/api/v1/me/password/change/",
+            {
+                "current_password": "OldPass123!",
+                "new_password": "NewPass123!",
+                "confirm_new_password": "NewPass123!",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChangePasswordAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewPass123!"))
+        self.assertIsNotNone(self.user.last_password_changed_at)
+
+    def test_change_password_rejects_wrong_current_password(self):
+        request = self.factory.post(
+            "/api/v1/me/password/change/",
+            {
+                "current_password": "WrongPass123!",
+                "new_password": "NewPass123!",
+                "confirm_new_password": "NewPass123!",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChangePasswordAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("current_password", response.data)
+
+    def test_change_password_rejects_mismatch(self):
+        request = self.factory.post(
+            "/api/v1/me/password/change/",
+            {
+                "current_password": "OldPass123!",
+                "new_password": "NewPass123!",
+                "confirm_new_password": "DifferentPass123!",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = ChangePasswordAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("confirm_new_password", response.data)
+
 
 class CurrentUserCheseraNumberAPIViewTests(TestCase):
     def setUp(self):

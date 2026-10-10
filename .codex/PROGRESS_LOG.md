@@ -119,7 +119,7 @@ Current Swagger direction:
 Completed:
 
 - Added view-level drf-spectacular documentation for active API endpoints using `extend_schema` and `extend_schema_view`.
-- Documented active auth endpoints under `Auth - User`, `Auth - Admin`, and `Auth - Token`.
+- Documented active auth endpoints under `Auth - User`, `Auth - Admin`, and `Auth - Shared`.
 - Documented current user and plan/progress endpoints.
 - Documented active business profile, business settings, onboarding status, and notification endpoints.
 - Documented active reference-data endpoints for business types and industries.
@@ -783,3 +783,18 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test accounts.tests.AdminUserManagementAPIViewTests`
   - `.venv\Scripts\python.exe manage.py check`
 - Local note: the current venv does not yet have `openpyxl` installed; run `.venv\Scripts\pip.exe install -r requirements.txt` before locally testing `format=xlsx`.
+
+## 2026-10-10 - Authenticated Password Change API
+
+- Added `POST /api/v1/me/password/change/` for both normal users and admin users.
+- Request body requires:
+  - `current_password`
+  - `new_password`
+  - `confirm_new_password`
+- Endpoint verifies the current password, checks that new password and confirmation match, runs Django password validation, updates the password, and sets `last_password_changed_at`.
+- Added Swagger request/response documentation.
+- Added regression tests for success, wrong current password, and mismatched confirmation.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts.tests.ChangePasswordAPIViewTests`
+  - `.venv\Scripts\python.exe manage.py check`

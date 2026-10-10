@@ -35,6 +35,8 @@ from .serializers import (
     AdminUserListResponseSerializer,
     AdminUserToggleActiveResponseSerializer,
     AdminUserToggleActiveSerializer,
+    ChangePasswordResponseSerializer,
+    ChangePasswordSerializer,
     ClientSendOTPResponseSerializer,
     ClientSignupSerializer,
     ClientSignupResponseSerializer,
@@ -206,6 +208,33 @@ class CustomTokenVerifyView(TokenVerifyView):
             {
                 "success": True,
                 "message": "Token is valid.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ChangePasswordAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Auth - Shared"],
+        summary="Change password",
+        description="Changes the authenticated user's password after verifying the current password. Works for both normal users and admin users.",
+        request=ChangePasswordSerializer,
+        responses={
+            200: ChangePasswordResponseSerializer,
+            400: OpenApiResponse(description="Current password is incorrect, passwords do not match, or new password is invalid."),
+            401: OpenApiResponse(description="Authentication required."),
+        },
+    )
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {
+                "success": True,
+                "message": "Password changed successfully.",
             },
             status=status.HTTP_200_OK,
         )
@@ -1223,7 +1252,7 @@ AdminLoginAPIView = extend_schema_view(
 
 CustomTokenRefreshView = extend_schema_view(
     post=extend_schema(
-        tags=["Auth - Token"],
+        tags=["Auth - Shared"],
         summary="Refresh JWT token",
         description="Accepts a valid refresh token and returns a fresh access token.",
         request=TokenRefreshSerializer,
@@ -1236,7 +1265,7 @@ CustomTokenRefreshView = extend_schema_view(
 
 CustomTokenVerifyView = extend_schema_view(
     post=extend_schema(
-        tags=["Auth - Token"],
+        tags=["Auth - Shared"],
         summary="Verify JWT token",
         description="Checks whether a JWT token is currently valid.",
         request=TokenVerifySerializer,
