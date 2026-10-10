@@ -251,6 +251,45 @@ class AdminLoginResponseSerializer(serializers.Serializer):
     data = AdminLoginDataSerializer()
 
 
+class AdminProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "full_name",
+            "email",
+            "phone_number",
+            "profile_picture",
+            "user_type",
+            "is_staff",
+            "last_activity_at",
+        )
+        read_only_fields = ("id", "phone_number", "user_type", "is_staff", "last_activity_at")
+
+    def validate_email(self, value):
+        email = (value or "").strip().lower()
+        if not email:
+            return None
+        queryset = User.objects.filter(email__iexact=email)
+        if self.instance:
+            queryset = queryset.exclude(id=self.instance.id)
+        if queryset.exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return email
+
+    def validate_full_name(self, value):
+        full_name = (value or "").strip()
+        if not full_name:
+            raise serializers.ValidationError("Full name cannot be empty.")
+        return full_name
+
+
+class AdminProfileResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = AdminProfileSerializer()
+
+
 class CurrentUserUpdateResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     message = serializers.CharField()

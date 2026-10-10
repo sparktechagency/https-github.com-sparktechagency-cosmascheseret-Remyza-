@@ -300,6 +300,35 @@ Updated on 2026-10-10:
   - `confirm_new_password`
 - The endpoint verifies the current password, validates the new password with Django password validators, requires confirmation match, updates the password, and stores `last_password_changed_at`.
 
+## CURRENT ADMIN GENERAL SETTINGS API
+
+Updated on 2026-10-10:
+
+- Chesera has one singleton `GeneralSettings` row for platform-wide configuration.
+- Admin/staff users can retrieve and update it at `GET/PATCH /api/v1/admin/settings/general/`.
+- Settings fields are:
+  - `app_name`
+  - `support_email`
+  - `support_phone`
+  - `default_timezone`
+  - `date_format`
+  - `currency`
+  - `maintenance_mode`
+  - `maintenance_message`
+  - `app_logo`
+- `default_timezone` is validated as an IANA timezone.
+- `currency` is normalized to uppercase.
+- When maintenance mode is turned from off to on, the backend creates high-priority `system_alert` REST notifications for normal users.
+
+## CURRENT ADMIN PROFILE API
+
+Updated on 2026-10-10:
+
+- Admin/staff users can manage their own profile at `GET/PATCH /api/v1/admin/profile/`.
+- GET returns full name, email, profile picture, phone number, user type, staff status, and last activity.
+- PATCH allows only full name, email, and profile picture updates.
+- Phone number is intentionally read-only on this endpoint.
+
 ## CURRENT SWAGGER / OPENAPI DOCUMENTATION STANDARD
 
 Updated on 2026-10-08:

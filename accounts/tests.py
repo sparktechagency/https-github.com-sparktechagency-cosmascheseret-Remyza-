@@ -11,6 +11,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from accounts.choices import OTPPurpose
 from accounts.models import OTPVerification, User
 from accounts.views import (
+    AdminProfileAPIView,
     AdminUserDetailAPIView,
     AdminUserExportCSVAPIView,
     AdminUserListAPIView,
@@ -246,6 +247,49 @@ class ChangePasswordAPIViewTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("confirm_new_password", response.data)
+
+
+class AdminProfileAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.admin = User.objects.create(
+            phone_number="+15557770000",
+            email="admin-profile@example.com",
+            full_name="Admin Profile",
+            is_staff=True,
+            user_type="ADMIN",
+        )
+
+    def test_admin_can_get_own_profile(self):
+        request = self.factory.get("/api/v1/admin/profile/")
+        force_authenticate(request, user=self.admin)
+
+        response = AdminProfileAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["phone_number"], "+15557770000")
+        self.assertEqual(response.data["data"]["full_name"], "Admin Profile")
+
+    def test_admin_can_patch_profile_but_not_phone_number(self):
+        request = self.factory.patch(
+            "/api/v1/admin/profile/",
+            {
+                "full_name": "Updated Admin",
+                "email": "updated-admin@example.com",
+                "phone_number": "+15559999999",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.admin)
+
+        response = AdminProfileAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.admin.refresh_from_db()
+        self.assertEqual(self.admin.full_name, "Updated Admin")
+        self.assertEqual(self.admin.email, "updated-admin@example.com")
+        self.assertEqual(self.admin.phone_number, "+15557770000")
+        self.assertEqual(response.data["data"]["phone_number"], "+15557770000")
 
 
 class CurrentUserCheseraNumberAPIViewTests(TestCase):

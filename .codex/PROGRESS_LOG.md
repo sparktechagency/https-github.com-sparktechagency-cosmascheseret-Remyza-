@@ -798,3 +798,20 @@ Validation run:
   - `.venv\Scripts\python.exe -m compileall -q accounts`
   - `.venv\Scripts\python.exe manage.py test accounts.tests.ChangePasswordAPIViewTests`
   - `.venv\Scripts\python.exe manage.py check`
+
+## 2026-10-10 - Admin General Settings and Admin Profile API
+
+- Added singleton platform general settings via `core.GeneralSettings`.
+- Added migration `core/migrations/0029_generalsettings.py`.
+- Added admin/staff-only endpoint `GET/PATCH /api/v1/admin/settings/general/`.
+- General settings include app name, support email, support phone, default timezone, date format, currency, maintenance mode, maintenance message, and app logo.
+- The settings endpoint always reads/updates one shared settings row, even with many admins.
+- Turning maintenance mode from off to on creates high-priority `system_alert` REST notifications for normal users.
+- Added admin/staff-only endpoint `GET/PATCH /api/v1/admin/profile/`.
+- Admin profile GET returns full name, email, profile picture, phone number, user type, staff status, and last activity.
+- Admin profile PATCH allows full name, email, and profile picture updates only; phone number remains read-only.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q core accounts`
+  - `.venv\Scripts\python.exe manage.py test core.tests.AdminGeneralSettingsAPIViewTests accounts.tests.AdminProfileAPIViewTests`
+  - `.venv\Scripts\python.exe manage.py check`
+- Note: `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` still reports unrelated pre-existing CRM migration drift only.
