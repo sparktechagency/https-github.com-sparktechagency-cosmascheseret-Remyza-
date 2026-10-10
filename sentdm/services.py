@@ -67,14 +67,109 @@ def get_sentdm_whatsapp_business_account(organization):
         "phone_number_id": values["sentdm_whatsapp_phone_number_id"],
         "access_token": values["sentdm_whatsapp_access_token"],
     }
+
+
+def clean_attr(obj, field, default=""):
+    return str(getattr(obj, field, default) or "").strip()
+
+
+def build_sentdm_message_flow(organization):
+    brand_name = clean_attr(organization, "sentdm_legal_name") or clean_attr(organization, "name")
+    method = clean_attr(organization, "sentdm_opt_in_method").lower()
+    starting_url = clean_attr(organization, "sentdm_opt_in_starting_url")
+    opt_in_url = clean_attr(organization, "sentdm_opt_in_form_url") or clean_attr(organization, "sentdm_opt_in_url")
+    screenshot_url = clean_attr(organization, "sentdm_opt_in_screenshot_url")
+    checkbox_text = clean_attr(organization, "sentdm_opt_in_checkbox_text")
+    disclaimer = clean_attr(organization, "sentdm_sms_disclaimer_text")
+    legacy_description = clean_attr(organization, "sentdm_opt_in_description")
+
+    method_labels = {
+        "web": "web/digital form",
+        "spoken": "spoken consent",
+        "physical": "physical/paper form",
+        "subscriber_initiated": "subscriber-initiated first message",
+    }
+    method_label = method_labels.get(method, method or "documented opt-in process")
+
+    parts = [f"SMS opt-in for {brand_name} is collected through {method_label}."]
+    if method == "web":
+        parts.append(f"Subscribers navigate to {opt_in_url} from {starting_url}.")
+        parts.append("The opt-in form includes an optional, unchecked SMS consent checkbox.")
+    elif method == "spoken":
+        parts.append("Consent is collected verbally using the documented script below before any SMS is sent.")
+    elif method == "physical":
+        parts.append("Consent is collected on a physical form before any SMS is sent.")
+    elif method == "subscriber_initiated":
+        parts.append("The business publishes its Chesera/Sent.dm number with SMS disclosures, and subscribers opt in by sending the first message.")
+
+    if legacy_description:
+        parts.append(legacy_description)
+    if checkbox_text:
+        parts.append(f"Checkbox/consent text: {checkbox_text}")
+    if disclaimer:
+        parts.append(f"SMS disclaimer: {disclaimer}")
+    if screenshot_url:
+        parts.append(f"Hosted opt-in screenshot: {screenshot_url}")
+    parts.append(f"Privacy Policy: {clean_attr(organization, 'sentdm_privacy_policy_url')}")
+    parts.append(f"Terms: {clean_attr(organization, 'sentdm_terms_url')}")
+    parts.append("Privacy policy confirms no mobile information will be sold or shared with third parties for promotional or marketing purposes.")
+    return " ".join(part for part in parts if part).strip()
+
+
+def build_sentdm_brand_compliance(organization, user):
+    legal_name = clean_attr(organization, "sentdm_legal_name") or clean_attr(organization, "name")
+    return {
+        "inherit": False,
+        "legal_name": legal_name,
+        "business_name": clean_attr(organization, "name") or legal_name,
+        "tax_id": clean_attr(organization, "sentdm_tax_id"),
+        "tax_id_type": clean_attr(organization, "sentdm_tax_id_type") or "EIN",
+        "ein_issuing_country": clean_attr(organization, "sentdm_ein_issuing_country") or "US",
+        "entity_type": clean_attr(organization, "sentdm_entity_type"),
+        "street": clean_attr(organization, "sentdm_brand_street"),
+        "city": clean_attr(organization, "sentdm_brand_city"),
+        "state": clean_attr(organization, "sentdm_brand_state"),
+        "postal_code": clean_attr(organization, "sentdm_brand_postal_code"),
+        "country": clean_attr(organization, "country") or "US",
+        "website": clean_attr(organization, "website"),
+        "contact_name": clean_attr(organization, "sentdm_authorized_rep_name") or getattr(user, "full_name", ""),
+        "contact_email": clean_attr(organization, "sentdm_authorized_rep_email") or clean_attr(organization, "sentdm_support_email") or getattr(user, "email", ""),
+        "contact_phone": clean_attr(organization, "sentdm_authorized_rep_phone") or getattr(user, "phone_number", ""),
+    }
+
+
+def build_sentdm_campaign_compliance(organization):
+    volume = int(getattr(organization, "sentdm_expected_daily_volume", 0) or 0)
+    campaign = {
+        "inherit": False,
+        "description": clean_attr(organization, "sentdm_messaging_use_case"),
+        "message_flow": build_sentdm_message_flow(organization),
+        "use_cases": [clean_attr(organization, "sentdm_messaging_use_case_us").upper() or "CUSTOMER_CARE"],
+        "opt_in_message": clean_attr(organization, "sentdm_opt_in_confirmation_message"),
+        "opt_out_message": clean_attr(organization, "sentdm_opt_out_confirmation_message"),
+        "help_message": clean_attr(organization, "sentdm_help_response_message"),
+        "opt_in_keywords": "YES, START, SUBSCRIBE",
+        "opt_out_keywords": "STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT",
+        "help_keywords": "HELP",
+        "privacy_policy_link": clean_attr(organization, "sentdm_privacy_policy_url"),
+        "terms_and_conditions_link": clean_attr(organization, "sentdm_terms_url"),
+        "volume": str(volume) if volume > 0 else "",
+    }
+    return campaign
+
+
+def build_sentdm_profile_compliance(organization, user):
+    return {
+        "brand": build_sentdm_brand_compliance(organization, user),
+        "campaign": build_sentdm_campaign_compliance(organization),
+    }
+
+
 def build_profile_payload(organization, user, overrides=None):
     overrides = overrides or {}
     name = getattr(organization, "name", "") or user.full_name or user.phone_number
     email = getattr(organization, "email", "") or user.email or ""
-    legal_name = getattr(organization, "sentdm_legal_name", "") or name
     support_email = getattr(organization, "sentdm_support_email", "") or email
-    authorized_rep_name = getattr(organization, "sentdm_authorized_rep_name", "") or user.full_name or name
-    vertical = getattr(organization, "sentdm_vertical", "") or "PROFESSIONAL"
 
     payload = {
         "name": overrides.get("name") or name,
@@ -86,28 +181,14 @@ def build_profile_payload(organization, user, overrides=None):
         "billing_model": "organization",
     }
 
+    if organization:
+        payload["smsCountry"] = "US"
+        payload["smsNumberType"] = "TEN_DLC"
+        payload["compliance"] = build_sentdm_profile_compliance(organization, user)
+
     whatsapp_business_account = get_sentdm_whatsapp_business_account(organization)
     if whatsapp_business_account:
         payload["whatsapp_business_account"] = whatsapp_business_account
-
-    website = getattr(organization, "website", "")
-    if website or support_email:
-        payload["brand"] = {
-            "contact": {
-                "name": authorized_rep_name,
-                "businessName": legal_name,
-                "email": overrides.get("email") or support_email,
-            },
-            "business": {
-                "legalName": legal_name,
-                "country": getattr(organization, "country", "US") or "US",
-            },
-            "compliance": {
-                "vertical": vertical,
-                "brandRelationship": "SMALL_ACCOUNT",
-                "isTcrApplication": True,
-            },
-        }
     return payload
 
 def get_response_whatsapp_phone_number(data):
@@ -279,10 +360,21 @@ def connect_agent_whatsapp_for_user(user, whatsapp_data, profile_id=None):
     return profile, response
 SENTDM_10DLC_REQUIRED_FIELDS = {
     "sentdm_legal_name": "Legal business name is required for 10DLC registration.",
+    "sentdm_tax_id": "Business tax ID/EIN is required for 10DLC brand registration.",
+    "sentdm_tax_id_type": "Tax ID type is required for 10DLC brand registration.",
+    "sentdm_entity_type": "Business entity type is required for 10DLC brand registration.",
+    "sentdm_brand_street": "Business street address is required for 10DLC brand registration.",
+    "sentdm_brand_city": "Business city is required for 10DLC brand registration.",
+    "sentdm_brand_state": "Business state is required for 10DLC brand registration.",
+    "sentdm_brand_postal_code": "Business postal code is required for 10DLC brand registration.",
+    "sentdm_authorized_rep_name": "Authorized representative name is required for 10DLC brand registration.",
+    "sentdm_authorized_rep_email": "Authorized representative email is required for 10DLC brand registration.",
+    "sentdm_authorized_rep_phone": "Authorized representative phone is required for 10DLC brand registration.",
     "sentdm_support_email": "Support email is required for HELP autoresponses.",
     "sentdm_privacy_policy_url": "Privacy Policy URL is required for 10DLC registration.",
     "sentdm_terms_url": "Terms and Conditions URL is required for 10DLC registration.",
-    "sentdm_opt_in_description": "Opt-in/message-flow description is required for 10DLC registration.",
+    "sentdm_opt_in_method": "Opt-in method is required: web, spoken, physical, or subscriber_initiated.",
+    "sentdm_sms_disclaimer_text": "SMS disclaimer text is required for 10DLC opt-in documentation.",
     "sentdm_messaging_use_case": "Campaign description/use case is required for 10DLC registration.",
     "sentdm_messaging_use_case_us": "US messaging use-case value is required for 10DLC registration.",
     "sentdm_sample_message_1": "At least one realistic sample message is required for 10DLC registration.",
@@ -292,6 +384,119 @@ SENTDM_10DLC_REQUIRED_FIELDS = {
 }
 SENTDM_SAMPLE_FIELDS = ("sentdm_sample_message_1", "sentdm_sample_message_2", "sentdm_sample_message_3")
 SENTDM_TWO_SAMPLE_USE_CASES = {"MARKETING", "MIXED", "LOW_VOLUME"}
+SENTDM_OPT_IN_METHODS = {"web", "spoken", "physical", "subscriber_initiated"}
+
+
+def add_missing_field(missing_fields, messages, field, message):
+    if field not in missing_fields:
+        missing_fields.append(field)
+        messages[field] = message
+
+
+def validate_sentdm_structured_opt_in(organization, missing_fields, messages):
+    method = clean_attr(organization, "sentdm_opt_in_method").lower()
+    if method and method not in SENTDM_OPT_IN_METHODS:
+        add_missing_field(
+            missing_fields,
+            messages,
+            "sentdm_opt_in_method",
+            "Opt-in method must be one of: web, spoken, physical, subscriber_initiated.",
+        )
+        return
+
+    if not getattr(organization, "sentdm_privacy_policy_no_mobile_sharing", False):
+        add_missing_field(
+            missing_fields,
+            messages,
+            "sentdm_privacy_policy_no_mobile_sharing",
+            "Confirm that the privacy policy says mobile information will not be sold or shared with third parties for promotional or marketing purposes.",
+        )
+
+    if method in {"web", "physical"}:
+        if not getattr(organization, "sentdm_sms_consent_optional", False):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_sms_consent_optional",
+                "SMS consent must be optional and distinct from general form submission.",
+            )
+        if not getattr(organization, "sentdm_sms_checkbox_not_prefilled", False):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_sms_checkbox_not_prefilled",
+                "The SMS consent checkbox must not be prefilled.",
+            )
+
+    if method == "web":
+        if not clean_attr(organization, "sentdm_opt_in_starting_url"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_starting_url",
+                "Starting URL is required to document how subscribers navigate to the opt-in form.",
+            )
+        if not clean_attr(organization, "sentdm_opt_in_form_url") and not clean_attr(organization, "sentdm_opt_in_url"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_form_url",
+                "Public opt-in form URL is required for web opt-in documentation.",
+            )
+        if not clean_attr(organization, "sentdm_opt_in_checkbox_text"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_checkbox_text",
+                "SMS checkbox/consent text is required for web opt-in documentation.",
+            )
+    elif method == "spoken":
+        if not clean_attr(organization, "sentdm_opt_in_description"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_description",
+                "Spoken opt-in requires a script explaining how verbal SMS consent is collected.",
+            )
+    elif method == "physical":
+        if not clean_attr(organization, "sentdm_opt_in_description"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_description",
+                "Physical opt-in requires a description of where/how the paper form is collected.",
+            )
+        if not clean_attr(organization, "sentdm_opt_in_screenshot_url"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_screenshot_url",
+                "Hosted screenshot URL is required for physical opt-in form documentation.",
+            )
+    elif method == "subscriber_initiated":
+        if not clean_attr(organization, "sentdm_opt_in_description"):
+            add_missing_field(
+                missing_fields,
+                messages,
+                "sentdm_opt_in_description",
+                "Subscriber-initiated opt-in requires a description of where the number/keyword and disclosures are published.",
+            )
+
+    use_case = clean_attr(organization, "sentdm_messaging_use_case_us").upper()
+    if use_case == "MARKETING" and not getattr(organization, "sentdm_marketing_messages_disclosed", False):
+        add_missing_field(
+            missing_fields,
+            messages,
+            "sentdm_marketing_messages_disclosed",
+            "Marketing campaigns must explicitly disclose that subscribers are accepting marketing texts.",
+        )
+    if use_case in {"POLITICAL", "CHARITY"} and not getattr(organization, "sentdm_donation_solicitation_disclosed", False):
+        add_missing_field(
+            missing_fields,
+            messages,
+            "sentdm_donation_solicitation_disclosed",
+            "Political or charity campaigns must disclose whether donations will be solicited.",
+        )
 
 
 def get_organization_for_user(user):
@@ -333,6 +538,7 @@ def get_sentdm_compliance_readiness(user, profile_id=None):
         if not str(getattr(organization, field, "") or "").strip():
             missing_fields.append(field)
             messages[field] = message
+    validate_sentdm_structured_opt_in(organization, missing_fields, messages)
 
     use_case = str(getattr(organization, "sentdm_messaging_use_case_us", "") or "").upper()
     sample_messages = get_sentdm_sample_messages(organization)
@@ -377,6 +583,7 @@ def get_sentdm_profile_creation_readiness(user):
         if not str(getattr(organization, field, "") or "").strip():
             missing_fields.append(field)
             messages[field] = message
+    validate_sentdm_structured_opt_in(organization, missing_fields, messages)
 
     use_case = str(getattr(organization, "sentdm_messaging_use_case_us", "") or "").upper()
     sample_messages = get_sentdm_sample_messages(organization)
@@ -422,7 +629,7 @@ def build_10dlc_campaign_payload(organization, *, campaign_name=None, campaign_t
 
     campaign = {
         "name": campaign_name or f"{organization.name} Customer Messaging",
-        "description": organization.sentdm_messaging_use_case,
+        "description": clean_attr(organization, "sentdm_messaging_use_case"),
         "type": campaign_type or "App",
         "useCases": [
             {
@@ -430,12 +637,12 @@ def build_10dlc_campaign_payload(organization, *, campaign_name=None, campaign_t
                 "sampleMessages": get_sentdm_sample_messages(organization),
             }
         ],
-        "messageFlow": organization.sentdm_opt_in_description,
-        "privacyPolicyLink": organization.sentdm_privacy_policy_url,
-        "termsAndConditionsLink": organization.sentdm_terms_url,
-        "optinMessage": organization.sentdm_opt_in_confirmation_message,
-        "optoutMessage": organization.sentdm_opt_out_confirmation_message,
-        "helpMessage": organization.sentdm_help_response_message,
+        "messageFlow": build_sentdm_message_flow(organization),
+        "privacyPolicyLink": clean_attr(organization, "sentdm_privacy_policy_url"),
+        "termsAndConditionsLink": clean_attr(organization, "sentdm_terms_url"),
+        "optinMessage": clean_attr(organization, "sentdm_opt_in_confirmation_message"),
+        "optoutMessage": clean_attr(organization, "sentdm_opt_out_confirmation_message"),
+        "helpMessage": clean_attr(organization, "sentdm_help_response_message"),
         "optinKeywords": "YES, START, SUBSCRIBE",
         "optoutKeywords": "STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT",
         "helpKeywords": "HELP",

@@ -719,3 +719,23 @@ Validation run:
 - Updated `GET /api/v1/user-subscription/` to use actual page/page_size pagination at runtime.
 - Updated reference-data list schemas for business types and industries to show their real `{ success, count, data }` response envelope.
 - Verification note: `python -m compileall -q accounts crm notifications subscription core`, `python -m compileall -q accounts`, and `python -m compileall -q business` passed. Full OpenAPI validation is still blocked locally because global Python is missing `django_extensions`; run `python manage.py spectacular --file tmp_schema.yml --validate` after restoring/installing the project venv.
+
+## 2026-10-10 - Sent.dm Structured 10DLC Opt-in Compliance
+
+- Verified through the Sent.dm MCP server that US 10DLC Sender Profile creation uses `sender_profiles.create` with `smsCountry=US`, `smsNumberType=TEN_DLC`, and nested `compliance.brand` plus `compliance.campaign`.
+- Added structured 10DLC brand fields to `Organization`: tax ID type, EIN issuing country, entity type, business street/city/state/postal code.
+- Added structured opt-in evidence fields: opt-in method, starting URL, form URL, screenshot URL, checkbox text, SMS disclaimer, privacy-policy no-mobile-sharing confirmation, optional consent confirmation, unchecked checkbox confirmation, marketing disclosure, and donation solicitation disclosure.
+- Exposed those fields through business serializers and Django admin.
+- Updated Sent.dm profile payload generation so Sender Profile creation now includes:
+  - `smsCountry: "US"`
+  - `smsNumberType: "TEN_DLC"`
+  - `compliance.brand`
+  - `compliance.campaign`
+- Added backend-generated `message_flow` text from structured opt-in fields instead of relying only on a manually written description.
+- Tightened Sent.dm readiness checks so incomplete brand data or opt-in evidence blocks profile/campaign setup with clear missing-field messages.
+- Added migration `business/migrations/0035_organization_sentdm_structured_opt_in.py`.
+- Added focused tests for generated Sent.dm 10DLC profile compliance payload and generated message flow.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q business sentdm`
+  - `.venv\Scripts\python.exe manage.py test sentdm.tests.SentDMClientSandboxTests sentdm.tests.SentDMPaidSubscriptionPermissionTests`
+- Note: `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` still reports unrelated pre-existing pending migrations in `crm` and `supports`; it did not report a missing `business` migration for these new fields.

@@ -118,6 +118,16 @@ class SentDMClientSandboxTests(SimpleTestCase):
             sentdm_sample_message_1 = "Remyza Realty: Thanks for reaching out about the property. Reply STOP to opt out."
             sentdm_sample_message_2 = ""
             sentdm_sample_message_3 = ""
+            sentdm_opt_in_method = "web"
+            sentdm_opt_in_starting_url = "https://example.com"
+            sentdm_opt_in_form_url = "https://example.com/contact"
+            sentdm_opt_in_url = "https://example.com/contact"
+            sentdm_opt_in_screenshot_url = ""
+            sentdm_opt_in_checkbox_text = "I agree to receive SMS messages from Remyza Realty."
+            sentdm_sms_disclaimer_text = "You are opting in to receive customer-care texts from Remyza Realty. Msg and data rates may apply. Msg frequency varies. Reply HELP for help or STOP to opt out."
+            sentdm_privacy_policy_no_mobile_sharing = True
+            sentdm_sms_consent_optional = True
+            sentdm_sms_checkbox_not_prefilled = True
             sentdm_opt_in_description = "Lead submits a website form and agrees to receive SMS replies from Remyza Realty."
             sentdm_privacy_policy_url = "https://example.com/privacy"
             sentdm_terms_url = "https://example.com/terms"
@@ -132,7 +142,66 @@ class SentDMClientSandboxTests(SimpleTestCase):
         self.assertEqual(campaign["volume"], "250")
         self.assertEqual(campaign["useCases"][0]["messagingUseCaseUs"], "CUSTOMER_CARE")
         self.assertEqual(len(campaign["useCases"][0]["sampleMessages"]), 1)
+        self.assertIn("optional, unchecked SMS consent checkbox", campaign["messageFlow"])
+        self.assertIn("Privacy Policy: https://example.com/privacy", campaign["messageFlow"])
         self.assertEqual(campaign["optoutKeywords"], "STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT")
+
+    def test_build_profile_payload_includes_sentdm_10dlc_compliance_shape(self):
+        class User:
+            id = 8
+            full_name = "Agent Example"
+            phone_number = "+15551234567"
+            email = "agent@example.com"
+
+        class Organization:
+            name = "Example Realty"
+            email = "team@example.com"
+            website = "https://example.com"
+            country = "US"
+            sentdm_legal_name = "Example Realty LLC"
+            sentdm_tax_id = "12-3456789"
+            sentdm_tax_id_type = "EIN"
+            sentdm_ein_issuing_country = "US"
+            sentdm_entity_type = "PRIVATE_PROFIT"
+            sentdm_brand_street = "123 Main St"
+            sentdm_brand_city = "Austin"
+            sentdm_brand_state = "TX"
+            sentdm_brand_postal_code = "78701"
+            sentdm_authorized_rep_name = "Agent Example"
+            sentdm_authorized_rep_email = "agent@example.com"
+            sentdm_authorized_rep_phone = "+15551234567"
+            sentdm_support_email = "support@example.com"
+            sentdm_privacy_policy_url = "https://example.com/privacy"
+            sentdm_terms_url = "https://example.com/terms"
+            sentdm_opt_in_method = "web"
+            sentdm_opt_in_starting_url = "https://example.com"
+            sentdm_opt_in_form_url = "https://example.com/contact"
+            sentdm_opt_in_url = "https://example.com/contact"
+            sentdm_opt_in_screenshot_url = ""
+            sentdm_opt_in_checkbox_text = "I agree to receive SMS messages from Example Realty."
+            sentdm_sms_disclaimer_text = "You are opting in to receive customer-care texts from Example Realty. Msg and data rates may apply. Msg frequency varies. Reply HELP for help or STOP to opt out."
+            sentdm_privacy_policy_no_mobile_sharing = True
+            sentdm_sms_consent_optional = True
+            sentdm_sms_checkbox_not_prefilled = True
+            sentdm_messaging_use_case = "Customer care replies for opted-in real estate leads."
+            sentdm_messaging_use_case_us = "CUSTOMER_CARE"
+            sentdm_expected_daily_volume = 25
+            sentdm_opt_in_confirmation_message = "Example Realty: Thanks for opting in. Reply STOP to opt out."
+            sentdm_opt_out_confirmation_message = "Example Realty: You have been unsubscribed."
+            sentdm_help_response_message = "Example Realty: Contact support@example.com. Reply STOP to opt out."
+            sentdm_whatsapp_waba_id = ""
+            sentdm_whatsapp_phone_number_id = ""
+            sentdm_whatsapp_access_token = ""
+
+        payload = build_profile_payload(Organization(), User())
+
+        self.assertEqual(payload["smsCountry"], "US")
+        self.assertEqual(payload["smsNumberType"], "TEN_DLC")
+        self.assertEqual(payload["compliance"]["brand"]["legal_name"], "Example Realty LLC")
+        self.assertEqual(payload["compliance"]["brand"]["tax_id_type"], "EIN")
+        self.assertEqual(payload["compliance"]["campaign"]["use_cases"], ["CUSTOMER_CARE"])
+        self.assertIn("Example Realty", payload["compliance"]["campaign"]["message_flow"])
+        self.assertEqual(payload["compliance"]["campaign"]["privacy_policy_link"], "https://example.com/privacy")
 
 class SentDMSendModeGuardTests(SimpleTestCase):
     def setUp(self):
@@ -198,9 +267,32 @@ class SentDMPaidSubscriptionPermissionTests(SimpleTestCase):
 
         class Organization:
             sentdm_legal_name = "Example Realty LLC"
+            sentdm_tax_id = "12-3456789"
+            sentdm_tax_id_type = "EIN"
+            sentdm_ein_issuing_country = "US"
+            sentdm_entity_type = "PRIVATE_PROFIT"
+            sentdm_brand_street = "123 Main St"
+            sentdm_brand_city = "Austin"
+            sentdm_brand_state = "TX"
+            sentdm_brand_postal_code = "78701"
+            sentdm_authorized_rep_name = "Agent Example"
+            sentdm_authorized_rep_email = "agent@example.com"
+            sentdm_authorized_rep_phone = "+15551234567"
             sentdm_support_email = "support@example.com"
             sentdm_privacy_policy_url = "https://example.com/privacy"
             sentdm_terms_url = "https://example.com/terms"
+            sentdm_opt_in_method = "web"
+            sentdm_opt_in_starting_url = "https://example.com"
+            sentdm_opt_in_form_url = "https://example.com/contact"
+            sentdm_opt_in_url = "https://example.com/contact"
+            sentdm_opt_in_screenshot_url = ""
+            sentdm_opt_in_checkbox_text = "I agree to receive SMS messages from Example Realty."
+            sentdm_sms_disclaimer_text = "You are opting in to receive customer-care texts from Example Realty. Msg and data rates may apply. Msg frequency varies. Reply HELP for help or STOP to opt out."
+            sentdm_privacy_policy_no_mobile_sharing = True
+            sentdm_sms_consent_optional = True
+            sentdm_sms_checkbox_not_prefilled = True
+            sentdm_marketing_messages_disclosed = False
+            sentdm_donation_solicitation_disclosed = False
             sentdm_opt_in_description = "Lead submits a form and agrees to receive replies."
             sentdm_messaging_use_case = "Customer care replies for opted-in real estate leads."
             sentdm_messaging_use_case_us = "CUSTOMER_CARE"

@@ -230,6 +230,36 @@ Updated on 2026-10-08:
 - WhatsApp config is stored on the user's `Organization`; `profile_id` comes from the current local `SentDMProfile` when available.
 - The GET endpoint is for paid/authenticated users and returns blank strings for missing saved values.
 
+## CURRENT SENT.DM 10DLC OPT-IN COMPLIANCE FLOW
+
+Updated on 2026-10-10:
+
+- Sent.dm MCP confirmed that US 10DLC Sender Profile setup should be sent through `sender_profiles.create` with `smsCountry=US`, `smsNumberType=TEN_DLC`, and nested `compliance.brand` plus `compliance.campaign`.
+- Chesera now stores structured brand registration fields on `Organization`:
+  - `sentdm_tax_id_type`
+  - `sentdm_ein_issuing_country`
+  - `sentdm_entity_type`
+  - `sentdm_brand_street`
+  - `sentdm_brand_city`
+  - `sentdm_brand_state`
+  - `sentdm_brand_postal_code`
+- Chesera now stores structured SMS opt-in evidence fields on `Organization`:
+  - `sentdm_opt_in_method`
+  - `sentdm_opt_in_starting_url`
+  - `sentdm_opt_in_form_url`
+  - `sentdm_opt_in_screenshot_url`
+  - `sentdm_opt_in_checkbox_text`
+  - `sentdm_sms_disclaimer_text`
+  - `sentdm_privacy_policy_no_mobile_sharing`
+  - `sentdm_sms_consent_optional`
+  - `sentdm_sms_checkbox_not_prefilled`
+  - `sentdm_marketing_messages_disclosed`
+  - `sentdm_donation_solicitation_disclosed`
+- Supported opt-in methods are `web`, `spoken`, `physical`, and `subscriber_initiated`.
+- Backend readiness checks now block Sender Profile/campaign setup when required brand fields or method-specific opt-in evidence is missing.
+- Backend generates Sent.dm `compliance.campaign.message_flow` from structured fields, so frontend/client users do not need to manually write a reviewer-perfect 10DLC message flow.
+- Sender Profile creation payload now includes `smsCountry`, `smsNumberType`, and `compliance` directly in the profile create request.
+
 ## CURRENT SWAGGER / OPENAPI DOCUMENTATION STANDARD
 
 Updated on 2026-10-08:
