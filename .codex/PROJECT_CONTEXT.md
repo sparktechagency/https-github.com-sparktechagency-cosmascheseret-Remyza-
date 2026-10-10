@@ -260,6 +260,35 @@ Updated on 2026-10-10:
 - Backend generates Sent.dm `compliance.campaign.message_flow` from structured fields, so frontend/client users do not need to manually write a reviewer-perfect 10DLC message flow.
 - Sender Profile creation payload now includes `smsCountry`, `smsNumberType`, and `compliance` directly in the profile create request.
 
+## CURRENT ADMIN USER MANAGEMENT API
+
+Updated on 2026-10-10:
+
+- Admin/staff users can manage users through `/api/v1/admin/users/`.
+- `GET /api/v1/admin/users/` is paginated and returns:
+  - summary counts: `total_users`, `total_active`, `total_blocked`, `total_on_trial`
+  - rows with `user_id`, `user_name`, `business_name`, `profile_pic`, `email`, `phone`, `plan`, `messages_sent_count`, `leads_count`, `is_active`, and `joined_date`
+- Supported list filters:
+  - `plan=pro|trial|free`
+  - `is_active=true|false`
+  - `search=` across user name, phone, email, and business name
+- `GET /api/v1/admin/users/{user_id}/` returns detailed user, organization, subscription, lead/message count, and status data.
+- `PATCH /api/v1/admin/users/{user_id}/` accepts `{ "is_active": true|false }`.
+- The API maps `is_active` to the existing `User.status` field:
+  - `true` -> `ACTIVE`
+  - `false` -> `INACTIVE`
+- `DELETE /api/v1/admin/users/{user_id}/` deletes a user account.
+- `GET /api/v1/admin/users/export/` exports the filtered user list as CSV.
+- `supports/migrations/0001_initial.py` exists because `supports.Feedback.user` participates in user delete cascades.
+- Admin user retrieve also includes `days_active`, `response_rate`, `business_type`, `timezone`, humanized `last_active`, `chesera_number`, and expanded `subscription` plan details including price, start date, and next renewal.
+- Admin user export supports:
+  - `format=csv|xlsx`
+  - `delimiter=comma|semicolon|tab`
+  - `date_range=all_time|last_week|last_month`
+  - `columns=` with selected fields
+- Exportable columns are `user_id`, `full_name`, `email`, `phone`, `business_name`, `business_type`, `plan`, `status`, `messages_sent_count`, `leads_count`, `joined_date`, `last_active`, and `chesera_number`.
+- XLSX export requires `openpyxl`, which is pinned in `requirements.txt`.
+
 ## CURRENT SWAGGER / OPENAPI DOCUMENTATION STANDARD
 
 Updated on 2026-10-08:

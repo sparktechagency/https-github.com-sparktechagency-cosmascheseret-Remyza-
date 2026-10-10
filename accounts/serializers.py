@@ -415,3 +415,119 @@ class CurrentUserPlanAndProgressResponseSerializer(serializers.Serializer):
     success = serializers.BooleanField()
     message = serializers.CharField()
     data = UserPlanAndProgressDataSerializer()
+
+
+class AdminUserListItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.IntegerField()
+    user_name = serializers.CharField(allow_blank=True)
+    business_name = serializers.CharField(allow_blank=True, allow_null=True)
+    profile_pic = serializers.CharField(allow_blank=True, allow_null=True)
+    email = serializers.EmailField(allow_blank=True, allow_null=True)
+    phone = serializers.CharField()
+    plan = serializers.CharField()
+    messages_sent_count = serializers.IntegerField()
+    leads_count = serializers.IntegerField()
+    is_active = serializers.BooleanField()
+    joined_date = serializers.DateTimeField()
+
+
+class AdminUserListSummarySerializer(serializers.Serializer):
+    total_users = serializers.IntegerField()
+    total_active = serializers.IntegerField()
+    total_blocked = serializers.IntegerField()
+    total_on_trial = serializers.IntegerField()
+
+
+class AdminUserListResponseDataSerializer(serializers.Serializer):
+    summary = AdminUserListSummarySerializer()
+    count = serializers.IntegerField()
+    next = serializers.CharField(allow_null=True)
+    previous = serializers.CharField(allow_null=True)
+    results = AdminUserListItemSerializer(many=True)
+
+
+class AdminUserListResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = AdminUserListResponseDataSerializer()
+
+
+class AdminUserSubscriptionDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField(allow_null=True)
+    plan = serializers.CharField()
+    price = serializers.CharField(allow_blank=True)
+    plan_type = serializers.CharField(allow_blank=True)
+    product_id = serializers.CharField(allow_blank=True)
+    status = serializers.CharField(allow_blank=True)
+    is_active = serializers.BooleanField()
+    medium = serializers.CharField(allow_blank=True)
+    start_date = serializers.DateTimeField(allow_null=True)
+    next_renewal = serializers.DateTimeField(allow_null=True)
+    purchase_date = serializers.DateTimeField(allow_null=True)
+    expiry_date = serializers.DateTimeField(allow_null=True)
+
+
+class AdminUserOrganizationDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField(allow_null=True)
+    name = serializers.CharField(allow_blank=True, allow_null=True)
+    email = serializers.EmailField(allow_blank=True, allow_null=True)
+    website = serializers.CharField(allow_blank=True)
+    country = serializers.CharField(allow_blank=True)
+    business_type = serializers.CharField(allow_blank=True)
+    is_onboarding_completed = serializers.BooleanField()
+
+
+class AdminUserDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    user_id = serializers.IntegerField()
+    full_name = serializers.CharField(allow_blank=True)
+    email = serializers.EmailField(allow_blank=True, allow_null=True)
+    phone_number = serializers.CharField()
+    city = serializers.CharField(allow_blank=True)
+    country = serializers.CharField(allow_blank=True)
+    country_code = serializers.CharField(allow_blank=True)
+    timezone = serializers.CharField(allow_blank=True)
+    profile_picture = serializers.CharField(allow_blank=True, allow_null=True)
+    user_type = serializers.CharField()
+    is_phone_verified = serializers.BooleanField()
+    is_active = serializers.BooleanField()
+    status = serializers.CharField()
+    plan = serializers.CharField()
+    messages_sent_count = serializers.IntegerField()
+    leads_count = serializers.IntegerField()
+    days_active = serializers.IntegerField()
+    response_rate = serializers.FloatField()
+    business_type = serializers.CharField(allow_blank=True, allow_null=True)
+    chesera_number = serializers.CharField(allow_blank=True, allow_null=True)
+    joined_date = serializers.DateTimeField()
+    last_active = serializers.CharField(allow_blank=True)
+    last_activity_at = serializers.DateTimeField(allow_null=True)
+    organization = AdminUserOrganizationDetailSerializer(allow_null=True)
+    subscription = AdminUserSubscriptionDetailSerializer(allow_null=True)
+
+
+class AdminUserDetailResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    data = AdminUserDetailSerializer()
+
+
+class AdminUserToggleActiveSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField()
+
+
+class AdminUserToggleActiveResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    data = AdminUserDetailSerializer()
+
+
+class AdminUserDeleteResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+
+
+class AdminUserExportQuerySerializer(serializers.Serializer):
+    format = serializers.ChoiceField(choices=("csv", "xlsx"), required=False, default="csv")
+    delimiter = serializers.ChoiceField(choices=("comma", "semicolon", "tab"), required=False, default="comma")
+    date_range = serializers.ChoiceField(choices=("all_time", "last_week", "last_month"), required=False, default="all_time")
+    columns = serializers.CharField(required=False, allow_blank=True)

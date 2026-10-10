@@ -739,3 +739,47 @@ Validation run:
   - `.venv\Scripts\python.exe -m compileall -q business sentdm`
   - `.venv\Scripts\python.exe manage.py test sentdm.tests.SentDMClientSandboxTests sentdm.tests.SentDMPaidSubscriptionPermissionTests`
 - Note: `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` still reports unrelated pre-existing pending migrations in `crm` and `supports`; it did not report a missing `business` migration for these new fields.
+
+## 2026-10-10 - Admin User Management API
+
+- Added staff/admin-only user management endpoints:
+  - `GET /api/v1/admin/users/`
+  - `GET /api/v1/admin/users/{user_id}/`
+  - `PATCH /api/v1/admin/users/{user_id}/`
+  - `DELETE /api/v1/admin/users/{user_id}/`
+  - `GET /api/v1/admin/users/export/`
+- User list returns summary counters: total users, active users, blocked users, and users on trial.
+- User list rows include user ID, name, business name, profile picture, email, phone, normalized plan (`pro`, `trial`, or `free`), sent-message count, lead count, active status, and joined date.
+- Added filters for `plan` and `is_active`, plus search by user name, phone, email, and business name.
+- Added DRF page/page_size pagination to the admin user list.
+- Toggle endpoint maps `is_active=true` to `status=ACTIVE` and `is_active=false` to `status=INACTIVE`, matching the existing project status model.
+- CSV export uses the same search/filter logic as the list endpoint.
+- Added missing `supports/migrations/0001_initial.py`; this fixes user delete cascade/test failures caused by `supports.Feedback.user` pointing to users without a migrated feedback table.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts.tests.AdminUserManagementAPIViewTests`
+  - `.venv\Scripts\python.exe manage.py check`
+- Note: `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` now only reports unrelated pre-existing CRM migration drift.
+
+## 2026-10-10 - Admin User Detail and Export Enhancements
+
+- Extended admin user retrieve response with:
+  - days active
+  - response rate
+  - business type
+  - timezone
+  - humanized last active value
+  - Chesera number
+  - expanded plan details: plan, price, start date, next renewal/end date
+- Admin export now supports:
+  - `format=csv|xlsx`
+  - `delimiter=comma|semicolon|tab` for CSV
+  - `date_range=all_time|last_week|last_month` based on user joined date
+  - `columns=` comma-separated selected columns
+- Supported export columns are: `user_id`, `full_name`, `email`, `phone`, `business_name`, `business_type`, `plan`, `status`, `messages_sent_count`, `leads_count`, `joined_date`, `last_active`, and `chesera_number`.
+- Added `openpyxl==3.1.5` to `requirements.txt` for XLSX export.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts`
+  - `.venv\Scripts\python.exe manage.py test accounts.tests.AdminUserManagementAPIViewTests`
+  - `.venv\Scripts\python.exe manage.py check`
+- Local note: the current venv does not yet have `openpyxl` installed; run `.venv\Scripts\pip.exe install -r requirements.txt` before locally testing `format=xlsx`.
