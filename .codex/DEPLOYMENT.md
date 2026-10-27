@@ -150,9 +150,11 @@ ECR stores your Docker images privately.
 1. Search `S3` ? **Create bucket**
 2. **Bucket name**: `remyza-media-prod`
 3. **Region**: same as EC2 (e.g. `us-east-1`)
-4. **Block Public Access**: KEEP ALL BLOCKED ?
-   (files are accessed via signed URLs or through Django)
-5. Leave everything else default ? **Create bucket**
+4. **Block Public Access**: 
+   - Turn **OFF** "Block all public access" (uncheck all 4 boxes) so user media/profile pictures can be viewed by mobile apps and web browsers.
+   *(Note: Uploads/Deletes are still restricted only to your backend credentials via the Bucket Policy).*
+5. **Object Ownership**: Bucket owner enforced (default)
+6. Click **Create bucket**
 
 ### Bucket CORS (needed for direct file access from frontend)
 
@@ -163,32 +165,46 @@ ECR stores your Docker images privately.
   {
     "AllowedHeaders": ["*"],
     "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
-    "AllowedOrigins": ["https://trychesera.com", "https://www.trychesera.com", "https://api.trychesera.com"],
+    "AllowedOrigins": ["https://trychesera.com", "https://www.trychesera.com", "https://api.trychesera.com", "https://www.api.trychesera.com"],
     "ExposeHeaders": ["ETag"]
   }
 ]
 ```
 3. Save
 
-### Bucket Policy (allow EC2 instance role to access it)
+### Bucket Policy (allow backend upload/delete + allow public read for media)
 
-Go to **Permissions** ? **Bucket policy** ? paste (replace `ACCOUNT_ID` and bucket name):
+Go to **Permissions** ? **Bucket policy** ? paste:
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowEC2RoleAccess",
+      "Sid": "AllowBackendAccess",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::YOUR_ACCOUNT_ID:role/remyza-ec2-role"
+        "AWS": [
+          "arn:aws:iam::YOUR_ACCOUNT_ID:user/CheseraDeveloper1"
+        ]
       },
-      "Action": ["s3:GetObject","s3:PutObject","s3:DeleteObject"],
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::remyza-media-prod/*"
+    },
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
       "Resource": "arn:aws:s3:::remyza-media-prod/*"
     }
   ]
 }
 ```
+*(Replace `YOUR_ACCOUNT_ID` with your AWS account ID, e.g. `460005624431`)*
 
 ---
 
