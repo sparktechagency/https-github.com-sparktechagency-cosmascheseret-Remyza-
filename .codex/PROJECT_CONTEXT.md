@@ -446,3 +446,13 @@ Updated on 2026-10-06:
 - `GET /api/v1/welcome-message/?template=professional` returns one preset and the current selection.
 - `PUT/PATCH /api/v1/welcome-message/` accepts only `{ "template": "professional|friendly|casual" }` and stores the selected backend-owned template in `StaticMessageTemplate`.
 - Custom message text is not accepted through this API; frontend should only let users choose one of the backend presets.
+
+## CURRENT MEDIA STORAGE CONFIGURATION
+
+Updated on 2026-10-27:
+
+- Production user-uploaded files are intended to use the `remyza-media-prod` S3 bucket.
+- The application runs Django 6, so S3 is configured through `STORAGES["default"]` with `storages.backends.s3.S3Storage`; the legacy `DEFAULT_FILE_STORAGE` setting is not effective in this Django version.
+- Static files remain separate and are served through WhiteNoise using the `staticfiles` storage backend.
+- Public profile-media URLs use `AWS_S3_CUSTOM_DOMAIN` and do not use signed query strings. Therefore S3 must permit anonymous `s3:GetObject` for the intended public media prefix.
+- Files uploaded before the Django 6 storage correction may exist only in the container/local media directory, despite their serialized URL appearing to be an S3 URL. Re-upload or migrate those files after deployment.

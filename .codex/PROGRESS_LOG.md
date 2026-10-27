@@ -875,6 +875,13 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py check`
 - Note: `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` still reports unrelated pre-existing CRM migration drift only.
 
+## 2026-10-27 - Django 6 S3 Media Storage Correction
+
+- Replaced the ineffective legacy `DEFAULT_FILE_STORAGE` configuration with Django 6 `STORAGES["default"]` using `storages.backends.s3.S3Storage` when `USE_S3=True`.
+- Kept WhiteNoise as the explicit Django 6 `staticfiles` storage backend.
+- Existing records can expose S3-looking URLs while their files were actually written to container-local media under the prior configuration; affected files must be re-uploaded or migrated to S3 after deployment.
+- Public browser access still depends on the S3 bucket/account policy and object encryption; it is independent of CORS.
+
 ## 2026-10-12 - Sent.dm Sender Profile Number Sync
 
 - Checked Sent.dm MCP for the current Chesera Sender Profile.
