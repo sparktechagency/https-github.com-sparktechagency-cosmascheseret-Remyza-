@@ -1,6 +1,7 @@
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.password_validation import validate_password
+from django.core import signing
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -144,6 +145,72 @@ class AdminLoginSerializer(serializers.Serializer):
         attrs["access"] = str(refresh.access_token)
         attrs["refresh"] = str(refresh)
         return attrs
+
+
+PASSWORD_RESET_TOKEN_SALT = "chesera.password-reset"
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class PasswordResetVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=6, max_length=10)
+
+    def validate(self, attrs):
+        email = attrs["email"].strip().lower()
+        otp_obj = OTPVerification.objects.latest_active_for_email(email, "PASSWORD_RESET")
+        if not otp_obj:
+            raise serializers.ValidationError("The verification code is invalid or has expired.")
+        success, _ = otp_obj.verify(attrs["otp"])
+        if not success:
+            raise serializers.ValidationError("The verification code is invalid or has expired.")
+        attrs["reset_token"] = signing.dumps(
+            {"user_id": otp_obj.user_id, "otp_id": otp_obj.id},
+            salt=PASSWORD_RESET_TOKEN_SALT,
+            compress=True,
+        )
+        return attrs
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    reset_token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True)
+    confirm_new_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_new_password"]:
+            raise serializers.ValidationError({"confirm_new_password": "New password and confirmation do not match."})
+        try:
+            payload = signing.loads(attrs["reset_token"], salt=PASSWORD_RESET_TOKEN_SALT, max_age=600)
+            otp_obj = OTPVerification.objects.select_related("user").get(
+                id=payload["otp_id"], user_id=payload["user_id"], purpose="PASSWORD_RESET", is_used=True
+            )
+        except (signing.BadSignature, signing.SignatureExpired, KeyError, OTPVerification.DoesNotExist):
+            raise serializers.ValidationError({"reset_token": "This password reset session is invalid or has expired."})
+        user = otp_obj.user
+        if not otp_obj.verified_at or (user.last_password_changed_at and user.last_password_changed_at >= otp_obj.verified_at):
+            raise serializers.ValidationError({"reset_token": "This password reset session has already been used."})
+        validate_password(attrs["new_password"], user)
+        attrs["user"] = user
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.validated_data["user"]
+        user.set_password(self.validated_data["new_password"])
+        user.last_password_changed_at = timezone.now()
+        user.save(update_fields=["password", "last_password_changed_at", "updated_at"])
+        return user
+
+
+class PasswordResetVerifyResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    reset_token = serializers.CharField()
 
 
 class CurrentUserSerializer(serializers.ModelSerializer):

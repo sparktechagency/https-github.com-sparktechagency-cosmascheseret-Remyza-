@@ -52,11 +52,15 @@ from .serializers import (
     CurrentUserPlanAndProgressResponseSerializer,
     CurrentUserResponseSerializer,
     CurrentUserUpdateResponseSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetVerifyResponseSerializer,
+    PasswordResetVerifySerializer,
 )
 from common.choices import Status
 from django.db import transaction
 from notifications.services import NotificationTemplates, safe_notify
-from .services import send_login_otp_email, send_registration_otp_sms
+from .services import send_login_otp_email, send_password_reset_otp_email, send_registration_otp_sms
 
 
 def mask_email(email):
@@ -209,6 +213,52 @@ class AdminLoginAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class PasswordResetRequestAPIView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
+
+    @extend_schema(tags=["Auth - Admin"], summary="Request password reset code", request=PasswordResetRequestSerializer)
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        user = User.objects.filter(email__iexact=email, is_staff=True, status=Status.ACTIVE).first()
+        if user:
+            otp_obj, otp = OTPVerification.objects.create_otp(user=user, email=email, purpose=OTPPurpose.PASSWORD_RESET)
+            try:
+                send_password_reset_otp_email(email=email, otp=otp)
+            except Exception:
+                otp_obj.delete()
+                raise
+        return Response({"success": True, "message": "If an active admin account exists for this email, a reset code has been sent."})
+
+
+class PasswordResetVerifyAPIView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_verify"
+
+    @extend_schema(tags=["Auth - Admin"], summary="Verify password reset code", request=PasswordResetVerifySerializer, responses={200: PasswordResetVerifyResponseSerializer})
+    def post(self, request):
+        serializer = PasswordResetVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response({"success": True, "message": "Verification successful.", "reset_token": serializer.validated_data["reset_token"]})
+
+
+class PasswordResetConfirmAPIView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset_verify"
+
+    @extend_schema(tags=["Auth - Admin"], summary="Set a new password", request=PasswordResetConfirmSerializer)
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"success": True, "message": "Password reset successfully. You can now sign in."})
 
 class CustomTokenRefreshView(TokenRefreshView):
     permission_classes = [AllowAny]

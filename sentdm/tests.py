@@ -445,6 +445,17 @@ class AdminMessageMonitoringAPIViewTests(TestCase):
         self.assertEqual(row["user"]["name"], "Agent Messages")
         self.assertEqual(row["contact"]["name"], "Lead Contact")
 
+    def test_admin_message_list_supports_search_status_and_direction_filters(self):
+        request = self.factory.get("/api/v1/admin/messages/?search=Follow-up&status=failed&direction=sent")
+        force_authenticate(request, user=self.admin)
+
+        response = AdminMessageListAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["count"], 1)
+        self.assertEqual(response.data["data"]["summary"]["failed_messages"], 1)
+        self.assertEqual(response.data["data"]["results"][0]["id"], self.failed_message.id)
+
     def test_admin_message_detail_returns_sender_receiver_metadata_and_conversation(self):
         request = self.factory.get(f"/api/v1/admin/messages/{self.delivered_message.id}/")
         force_authenticate(request, user=self.admin)

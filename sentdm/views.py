@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from django.db.models import Q
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -187,8 +188,8 @@ class AdminMessageMixin:
             "sent_message_id": message.sent_message_id,
         }
 
-    def get_summary(self):
-        queryset = SentDMMessage.objects.all()
+    def get_summary(self, queryset=None):
+        queryset = queryset if queryset is not None else SentDMMessage.objects.all()
         return {
             "total_messages": queryset.count(),
             "delivered_or_sent_messages": queryset.filter(
@@ -205,16 +206,56 @@ class AdminMessageListAPIView(AdminMessageMixin, APIView):
         tags=["Admin - Messages"],
         summary="List messages",
         description="Returns admin message summary counts and a paginated read-only list of Sent.dm inbound/outbound messages.",
+        parameters=[
+            OpenApiParameter("search", str, required=False, description="Search message text, Chesera user, contact name, or phone number."),
+            OpenApiParameter("status", str, required=False, description="Filter by pending, queued, sent, delivered, or failed."),
+            OpenApiParameter("direction", str, required=False, description="Filter by sent or received."),
+            OpenApiParameter("channel", str, required=False, description="Filter by sms, rcs, or whatsapp."),
+            OpenApiParameter("user_id", int, required=False, description="Filter by Chesera user id."),
+            OpenApiParameter("page", int, required=False),
+            OpenApiParameter("page_size", int, required=False),
+        ],
         responses={200: AdminMessageListResponseSerializer},
     )
     def get(self, request):
+        queryset = self.get_queryset()
+        search = (request.query_params.get("search") or "").strip()
+        message_status = (request.query_params.get("status") or "").strip().lower()
+        direction = (request.query_params.get("direction") or "").strip().lower()
+        channel = (request.query_params.get("channel") or "").strip().lower()
+        user_id = (request.query_params.get("user_id") or "").strip()
+
+        if search:
+            queryset = queryset.filter(
+                Q(body__icontains=search)
+                | Q(from_number__icontains=search)
+                | Q(to_number__icontains=search)
+                | Q(organization__owner__full_name__icontains=search)
+                | Q(organization__owner__email__icontains=search)
+                | Q(lead__full_name__icontains=search)
+                | Q(lead__contact__full_name__icontains=search)
+                | Q(lead__contact_number__icontains=search)
+            ).distinct()
+        if message_status in SentDMMessageStatus.values:
+            queryset = queryset.filter(status=message_status)
+        if direction in {"sent", "outbound"}:
+            queryset = queryset.filter(direction=SentDMMessageDirection.OUTBOUND)
+        elif direction in {"received", "inbound"}:
+            queryset = queryset.filter(direction=SentDMMessageDirection.INBOUND)
+        if channel in {"sms", "rcs", "whatsapp"}:
+            queryset = queryset.filter(channel=channel)
+        if user_id.isdigit():
+            queryset = queryset.filter(
+                Q(organization__owner_id=int(user_id)) | Q(profile__user_id=int(user_id))
+            )
+
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(self.get_queryset(), request, view=self)
+        page = paginator.paginate_queryset(queryset, request, view=self)
         return Response(
             {
                 "success": True,
                 "data": {
-                    "summary": self.get_summary(),
+                    "summary": self.get_summary(queryset),
                     "count": paginator.page.paginator.count,
                     "next": paginator.get_next_link(),
                     "previous": paginator.get_previous_link(),

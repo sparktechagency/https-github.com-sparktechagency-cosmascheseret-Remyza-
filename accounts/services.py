@@ -71,3 +71,28 @@ def send_login_otp_email(*, email, otp):
     except Exception as exc:
         logger.exception("Login OTP email delivery failed")
         raise OTPDeliveryError() from exc
+
+
+def send_password_reset_otp_email(*, email, otp):
+    subject = "Reset your Chesera password"
+    text_body = (
+        f"Your Chesera password reset code is {otp}. It expires in 5 minutes. "
+        "Do not share this code. If you did not request a password reset, ignore this email."
+    )
+    html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#172033">
+          <h2 style="margin-bottom:8px">Reset your Chesera password</h2>
+          <p>Use this one-time code to continue:</p>
+          <p style="font-size:30px;font-weight:700;letter-spacing:6px;margin:24px 0">{otp}</p>
+          <p>This code expires in 5 minutes. Do not share it with anyone.</p>
+          <p style="color:#64748b">If you did not request this, you can safely ignore this email.</p>
+        </div>
+    """
+    try:
+        message = EmailMultiAlternatives(subject=subject, body=text_body, from_email=settings.DEFAULT_FROM_EMAIL, to=[email])
+        message.attach_alternative(html_body, "text/html")
+        if message.send(fail_silently=False) != 1:
+            raise RuntimeError("Email backend did not confirm delivery acceptance.")
+    except Exception as exc:
+        logger.exception("Password reset OTP email delivery failed")
+        raise OTPDeliveryError() from exc

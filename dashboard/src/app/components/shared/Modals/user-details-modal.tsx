@@ -1,328 +1,45 @@
 "use client";
 
-import React from "react";
-import { X, MessageSquare, Target, Calendar, Percent } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogClose,
-} from "@/components/ui/dialog";
+import { Calendar, MessageSquare, Percent, Target } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { formatDate, formatNumber } from "@/lib/api";
+import type { AdminUserDetail } from "@/types/admin";
 
-interface UserDetailsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  userData: {
-    name: string;
-    email: string;
-    phone: string;
-    company: string;
-    plan: "Pro" | "Enterprise" | "Free";
-    status: "Active" | "Blocked" | "Trial";
-    joined: string;
-    messages: string;
-    leads: number;
-  } | null;
+export default function UserDetailsModal({ isOpen, onClose, userData, isLoading = false }: { isOpen: boolean; onClose: () => void; userData: AdminUserDetail | null; isLoading?: boolean }) {
+  return <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <DialogContent className="w-[94vw] max-w-3xl overflow-hidden rounded-3xl border-0 bg-white p-0 shadow-2xl">
+      <div className="border-b border-slate-100 px-6 py-5"><DialogTitle className="text-lg font-bold text-slate-900">User Details</DialogTitle></div>
+      {isLoading ? <div className="p-12 text-center text-sm text-slate-500">Loading user details…</div> : userData ? <div className="max-h-[78vh] space-y-6 overflow-y-auto p-6">
+        <div className="flex flex-wrap items-center gap-4">
+          {userData.profile_picture ? <img src={userData.profile_picture} alt="" className="h-14 w-14 rounded-full object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-700 text-lg font-bold text-white">{initials(userData.full_name)}</div>}
+          <div><h3 className="text-lg font-bold text-slate-900">{userData.full_name || "Unnamed user"}</h3><p className="text-sm text-slate-500">{userData.email || "No email"} · {userData.phone_number}</p><p className="text-sm text-slate-500">{userData.business_name || "No business profile"}</p></div>
+          <div className="ml-auto flex gap-2"><Badge>{title(userData.plan)}</Badge><Badge tone={userData.is_active ? "green" : "red"}>{userData.is_active ? "Active" : "Blocked"}</Badge></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Metric icon={<MessageSquare className="h-4 w-4" />} label="Messages sent" value={formatNumber(userData.messages_sent_count)} />
+          <Metric icon={<Target className="h-4 w-4" />} label="Leads" value={formatNumber(userData.leads_count)} />
+          <Metric icon={<Calendar className="h-4 w-4" />} label="Days active" value={formatNumber(userData.days_active)} />
+          <Metric icon={<Percent className="h-4 w-4" />} label="Response rate" value={`${userData.response_rate}%`} />
+        </div>
+        <Section heading="Account information">
+          <Field label="Business type" value={userData.business_type} /><Field label="Timezone" value={userData.timezone} />
+          <Field label="Location" value={[userData.city, userData.country].filter(Boolean).join(", ")} /><Field label="Joined" value={formatDate(userData.joined_date)} />
+          <Field label="Last active" value={userData.last_active} /><Field label="Phone verified" value={userData.is_phone_verified ? "Yes" : "No"} />
+        </Section>
+        <Section heading="Subscription">
+          <Field label="Plan" value={title(userData.subscription?.plan || userData.plan)} /><Field label="Price" value={userData.subscription?.price} />
+          <Field label="Start date" value={formatDate(userData.subscription?.start_date)} /><Field label="Next renewal" value={formatDate(userData.subscription?.next_renewal)} />
+          <Field label="Store" value={userData.subscription?.medium} /><Field label="Status" value={userData.subscription?.status || "No subscription"} />
+        </Section>
+        <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3"><div><p className="text-xs font-bold uppercase text-slate-400">Chesera number</p><p className="font-semibold text-blue-700">{userData.chesera_number || "Not assigned"}</p></div><Badge tone={userData.chesera_number ? "green" : "gray"}>{userData.chesera_number ? "Assigned" : "Pending"}</Badge></div>
+      </div> : <div className="p-12 text-center text-sm text-slate-500">User details are unavailable.</div>}
+    </DialogContent>
+  </Dialog>;
 }
 
-export default function UserDetailsModal({
-  isOpen,
-  onClose,
-  userData,
-}: UserDetailsModalProps) {
-  if (!userData) return null;
-
-  // Status color mapper matching your dashboard specs exactly
-  const getStatusStyles = (status: string) => {
-    switch (status) {
-      case "Active":
-        return "bg-[#E6F4EA] text-[#137333]";
-      case "Blocked":
-        return "bg-[#FCE8E6] text-[#C5221F]";
-      case "Trial":
-        return "bg-[#FEF7E0] text-[#B06000]";
-      default:
-        return "bg-slate-100 text-slate-600";
-    }
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-150 w-[94vw] overflow-hidden rounded-[24px] border-0 bg-white p-0 shadow-[0_20px_50px_rgba(0,0,0,0.12)] outline-none sm:rounded-[24px]">
-        {/* Modal Top Close Anchor bar */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-2">
-          <DialogTitle className="text-base font-bold text-[#0F172A]">
-            User Details
-          </DialogTitle>
-        </div>
-
-        {/* Outer Scroll Area container wrapper */}
-        <div className="px-6 pb-6 space-y-6 max-h-[82vh] overflow-y-auto hidden-scrollbar">
-          {/* PROFILE CARD IDENTIFIER HEADER */}
-          <div className="flex items-start gap-4 pt-2">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#004BCE] text-lg font-bold text-white">
-              {userData.name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-lg font-bold text-[#0F172A] leading-tight">
-                {userData.name}
-              </h3>
-              <p className="text-[13px] font-medium text-slate-400 leading-none">
-                {userData.email}
-              </p>
-              <p className="text-[13px] font-medium text-slate-400 leading-none">
-                {userData.phone}
-              </p>
-
-              <div className="flex items-center gap-1.5 pt-1">
-                <span className="inline-flex items-center rounded-md bg-[#004BCE] px-2 py-0.5 text-[11px] font-bold text-white">
-                  {userData.plan}
-                </span>
-                <span
-                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold ${getStatusStyles(userData.status)}`}
-                >
-                  {userData.status}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* FOUR-COLUMN HORIZONTAL SUMMARY STATS GRID CARDS */}
-          <div className="grid grid-cols-4 gap-2.5">
-            {/* Stat Item 1 */}
-            <div className="bg-[#F8FAFC] border border-slate-50 rounded-xl p-3 text-center space-y-1">
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-[#EFF6FF] text-[#2563EB]">
-                <MessageSquare className="h-4 w-4" />
-              </div>
-              <p className="text-sm font-bold text-[#0F172A] pt-1">
-                {userData.messages}
-              </p>
-              <p className="text-[10px] font-medium text-slate-400">
-                Messages Sent
-              </p>
-            </div>
-            {/* Stat Item 2 */}
-            <div className="bg-[#F8FAFC] border border-slate-50 rounded-xl p-3 text-center space-y-1">
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-[#F3E8FF] text-[#9333EA]">
-                <Target className="h-4 w-4" />
-              </div>
-              <p className="text-sm font-bold text-[#0F172A] pt-1">
-                {userData.leads}
-              </p>
-              <p className="text-[10px] font-medium text-slate-400">
-                Leads Generated
-              </p>
-            </div>
-            {/* Stat Item 3 */}
-            <div className="bg-[#F8FAFC] border border-slate-50 rounded-xl p-3 text-center space-y-1">
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-[#E6F4EA] text-[#137333]">
-                <Calendar className="h-4 w-4" />
-              </div>
-              <p className="text-sm font-bold text-[#0F172A] pt-1">87</p>
-              <p className="text-[10px] font-medium text-slate-400">
-                Days Active
-              </p>
-            </div>
-            {/* Stat Item 4 */}
-            <div className="bg-[#F8FAFC] border border-slate-50 rounded-xl p-3 text-center space-y-1">
-              <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-[#FEF7E0] text-[#B06000]">
-                <Percent className="h-4 w-4" />
-              </div>
-              <p className="text-sm font-bold text-[#0F172A] pt-1">94%</p>
-              <p className="text-[10px] font-medium text-slate-400">
-                Response Rate
-              </p>
-            </div>
-          </div>
-
-          {/* SECTION: ACCOUNT INFORMATION */}
-          <div className="space-y-3">
-            <h4 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-              Account Information
-            </h4>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-b border-slate-100 pb-5">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Full Name
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.name}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Email Address
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.email}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Phone Number
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.phone}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Business Name
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.company}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Business Type
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  Real Estate
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Time Zone
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  America/New_York
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Joined Date
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.joined}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Last Active
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  2h ago
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION: SUBSCRIPTION DETAIL METRICS REGISTRY */}
-          <div className="space-y-3">
-            <h4 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-              Subscription
-            </h4>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-b border-slate-100 pb-5">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Plan
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.plan}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Price
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  $79/month
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Start Date
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.joined}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Next Renewal
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  Jun 15, 2026
-                </p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  Status
-                </p>
-                <p className="text-cd font-semibold text-[#2C3E50] text-[13px] mt-0.5">
-                  {userData.status}
-                </p>
-                <a
-                  href="#view-sub"
-                  className="inline-block text-[11px] font-bold text-[#0052CC] hover:underline mt-1.5"
-                >
-                  View Subscription &rarr;
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION: USAGE THIS MONTH WITH LINE PROGRESSION INDICATORS */}
-          <div className="space-y-3.5">
-            <h4 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-              Usage This Month
-            </h4>
-            <div className="space-y-3">
-              {/* Progress metric 1 */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                  <span>Messages Sent</span>
-                  <span className="text-[#0F172A] font-bold">
-                    {userData.messages} / 2,000
-                  </span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-[#EFF3F6]">
-                  <div
-                    className="h-2 rounded-full bg-[#004BCE]"
-                    style={{ width: "62.3%" }}
-                  />
-                </div>
-              </div>
-
-              {/* Progress metric 2 */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                  <span>Leads Captured</span>
-                  <span className="text-[#0F172A] font-bold">
-                    {userData.leads} / 500
-                  </span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-[#EFF3F6]">
-                  <div
-                    className="h-2 rounded-full bg-[#8B5CF6]"
-                    style={{ width: "17.8%" }}
-                  />
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* FOOTER BOX AREA: SYSTEM REFERENCE CHESERA PHONE NUMBER LINE */}
-          <div className="rounded-xl border border-slate-100 bg-[#F8FAFC] px-4 py-3.5 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight block">
-                Chesera Number
-              </span>
-              <span className="text-sm font-bold text-[#004BCE]">
-                +1 (555) 100-0001
-              </span>
-            </div>
-            <span className="rounded-md bg-[#E6F4EA] px-2 py-0.5 text-[11px] font-bold text-[#137333]">
-              Active
-            </span>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+function initials(name: string) { return (name || "U").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
+function title(value?: string | null) { return value ? value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "—"; }
+function Badge({ children, tone = "blue" }: { children: React.ReactNode; tone?: "blue" | "green" | "red" | "gray" }) { const styles = { blue: "bg-blue-50 text-blue-700", green: "bg-emerald-50 text-emerald-700", red: "bg-red-50 text-red-700", gray: "bg-slate-100 text-slate-600" }; return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${styles[tone]}`}>{children}</span>; }
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) { return <div className="rounded-xl bg-slate-50 p-3 text-center"><div className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-lg bg-white text-blue-700">{icon}</div><p className="font-bold text-slate-900">{value}</p><p className="text-xs text-slate-500">{label}</p></div>; }
+function Section({ heading, children }: { heading: string; children: React.ReactNode }) { return <section><h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">{heading}</h4><div className="grid grid-cols-1 gap-x-8 gap-y-4 rounded-xl border border-slate-100 p-4 sm:grid-cols-2">{children}</div></section>; }
+function Field({ label, value }: { label: string; value?: string | null }) { return <div><p className="text-xs font-medium text-slate-400">{label}</p><p className="mt-0.5 text-sm font-semibold text-slate-700">{value || "—"}</p></div>; }

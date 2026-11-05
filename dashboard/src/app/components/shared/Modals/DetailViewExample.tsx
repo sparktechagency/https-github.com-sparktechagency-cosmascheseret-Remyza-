@@ -1,204 +1,66 @@
 "use client";
 
-import * as React from "react";
-import { X, User, MessageSquare, ArrowUpRight } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogClose,
-} from "@/components/ui/dialog";
+import type { ReactNode } from "react";
+import { MessageSquare, User } from "lucide-react";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { formatDate } from "@/lib/api";
+import type { AdminMessageDetail } from "@/types/admin";
 
-interface DetailViewExampleProps {
+interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onViewUser: () => void; // Triggers the User Profile Modal transition
-  onViewConversation: () => void; // Triggers the Conversation Thread Modal transition
-  data?: {
-    id: string;
-    user: string;
-    contactName: string;
-    contactPhone: string;
-    preview: string;
-    direction: string;
-    status: string;
-    timestamp: string;
-  } | null;
+  onViewUser: () => void;
+  onViewConversation: () => void;
+  data?: AdminMessageDetail | null;
+  loading?: boolean;
 }
 
-export function DetailViewExample({
-  isOpen,
-  onClose,
-  onViewUser,
-  onViewConversation,
-  data,
-}: DetailViewExampleProps) {
-  // Fallback defaults to preserve your absolute layout metrics if no row is selected yet
-  const displayData = data || {
-    id: "MSG-001",
-    user: "Alex Johnson",
-    contactName: "Chris Evans",
-    contactPhone: "+1 (555) 321-0987",
-    preview:
-      "Hi! I noticed you were looking at homes in the downtown area. I'd love to help you find your perfect property. We have several new listings this week that match your criteria. Would you like to schedule a tour?",
-    direction: "Sent",
-    status: "Delivered",
-    timestamp: "May 12, 2026 10:23 AM",
-  };
-
+export function DetailViewExample({ isOpen, onClose, onViewUser, onViewConversation, data, loading }: Props) {
+  const metadata = data ? Object.entries(data.metadata || {}) : [];
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="p-0 gap-0 w-[calc(100%-2rem)] sm:w-full sm:max-w-150 bg-white rounded-[28px] shadow-2xl border border-slate-100 overflow-hidden focus:outline-none text-left">
-        {/* Header Block */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white shrink-0">
-          <DialogTitle className="text-[17px] font-bold text-[#0F172A] tracking-tight">
-            Message Details
-          </DialogTitle>
+      <DialogContent className="p-0 gap-0 w-[calc(100%-2rem)] sm:max-w-150 rounded-[28px] overflow-hidden">
+        <div className="px-6 py-5 border-b"><DialogTitle className="text-[17px] font-bold">Message Details</DialogTitle></div>
+        <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          {loading && <p className="text-sm text-slate-400">Loading message details...</p>}
+          {!loading && data && <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Party label="From" name={data.from_user.name} phone={data.from_user.phone} />
+              <Party label="To" name={data.to.name} phone={data.to.phone} />
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px] font-bold">
+              <Badge value={data.channel || "unknown"} color="purple" />
+              <Badge value={data.status} color={data.status.toLowerCase() === "failed" ? "red" : "green"} />
+              <Badge value={data.direction} color="blue" />
+            </div>
+            <Info label="Timestamp" value={formatDate(data.timestamp)} />
+            <div>
+              <Label>Message Content</Label>
+              <div className="mt-2 rounded-2xl border bg-slate-50 p-4 text-sm leading-relaxed">{data.content || data.message}</div>
+            </div>
+            <div>
+              <Label>Metadata</Label>
+              <div className="mt-2 space-y-2 text-xs">
+                <Info label="Sent.dm message ID" value={data.sent_message_id || "—"} />
+                <Info label="Conversation ID" value={data.conversation_id?.toString() || "—"} />
+                {metadata.map(([key, value]) => <Info key={key} label={key.replaceAll("_", " ")} value={typeof value === "object" ? JSON.stringify(value) : String(value)} />)}
+              </div>
+            </div>
+          </>}
         </div>
-
-        {/* Modal Scrollable Workspace Context */}
-        <div className="px-6 py-5 space-y-5 bg-white max-h-[calc(85vh-120px)] overflow-y-auto custom-scrollbar">
-          {/* Sender & Recipient Direct Info Metrics */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* From Endpoint info */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                From
-              </span>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#004BCE] text-white font-bold text-xs">
-                  {displayData.user
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[13px] font-bold text-[#0F172A] leading-tight">
-                    {displayData.user}
-                  </span>
-                  <span className="text-[11px] font-medium text-slate-400">
-                    Chesera User
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* To Endpoint Info */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                To
-              </span>
-              <div className="flex flex-col justify-center h-10">
-                <span className="text-[13px] font-bold text-[#0F172A] leading-tight">
-                  {displayData.contactName}
-                </span>
-                <span className="text-[11px] font-semibold text-slate-400 mt-0.5">
-                  {displayData.contactPhone}
-                </span>
-              </div>
-            </div>
+        <div className="px-6 py-4 border-t flex items-center justify-between">
+          <div className="flex gap-4 text-xs font-bold text-[#004BCE]">
+            <button onClick={onViewUser} className="inline-flex items-center gap-1"><User className="h-3.5 w-3.5" /> View User</button>
+            <button onClick={onViewConversation} disabled={!data?.conversation_id} className="inline-flex items-center gap-1 disabled:opacity-40"><MessageSquare className="h-3.5 w-3.5" /> View Conversation</button>
           </div>
-
-          {/* Dynamic Status Badges System */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-[11px] font-bold bg-purple-50 text-purple-600">
-              {displayData.type}
-            </span>
-            <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-600">
-              {displayData.status}
-            </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-blue-50 text-[#004BCE]">
-              <ArrowUpRight className="h-3 w-3 stroke-[2.5]" />
-              <span>{displayData.direction}</span>
-            </span>
-          </div>
-
-          {/* Timestamp Segment */}
-          <div className="space-y-1">
-            <span className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wider block">
-              Timestamp
-            </span>
-            <p className="text-xs font-semibold text-slate-500">
-              {displayData.timestamp}
-            </p>
-          </div>
-
-          {/* Exact Message Content Box Layer */}
-          <div className="space-y-2">
-            <span className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wider block">
-              Message Content
-            </span>
-            <div className="w-full bg-slate-50/70 border border-slate-100/80 rounded-[18px] p-4 flex flex-col space-y-3">
-              <p className="text-xs font-medium text-[#0F172A] leading-relaxed">
-                {displayData.preview}
-              </p>
-              <span className="text-[11px] font-semibold text-slate-400">
-                {displayData.preview.length} characters
-              </span>
-            </div>
-          </div>
-
-          {/* Fixed System Analytical Metadata Breakdown */}
-          <div className="space-y-2.5 pt-1">
-            <span className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wider block">
-              Metadata
-            </span>
-            <div className="space-y-2 text-xs font-semibold">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Twilio Message SID</span>
-                <span className="text-[#0F172A] font-medium tracking-tight">
-                  SM1a2b3c4d5e6f7g8h9i0j
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Delivery Time</span>
-                <span className="text-[#0F172A] font-medium">0.4s</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Cost per Message</span>
-                <span className="text-[#0F172A] font-medium">$0.0079</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Message ID</span>
-                <span className="text-[#0F172A] font-medium">
-                  {displayData.id}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Navigation Cross Links Controls */}
-        <div className="px-6 py-4 bg-white border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-b-[28px]">
-          <div className="flex items-center gap-4 text-xs font-bold text-[#004BCE]">
-            <button
-              type="button"
-              onClick={onViewUser}
-              className="inline-flex items-center gap-1.5 hover:text-[#003BA3] transition-colors focus:outline-none"
-            >
-              <User className="h-3.5 w-3.5 stroke-[2.2]" />
-              <span>View User →</span>
-            </button>
-            <button
-              type="button"
-              onClick={onViewConversation}
-              className="inline-flex items-center gap-1.5 hover:text-[#003BA3] transition-colors focus:outline-none"
-            >
-              <MessageSquare className="h-3.5 w-3.5 stroke-[2.2]" />
-              <span>View Conversation →</span>
-            </button>
-          </div>
-
-          <DialogClose asChild>
-            <button
-              type="button"
-              className="w-full sm:w-auto text-center px-5 py-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-bold text-xs rounded-xl transition-colors focus:outline-none"
-            >
-              Close
-            </button>
-          </DialogClose>
+          <DialogClose asChild><button className="px-5 py-2.5 border rounded-xl text-xs font-bold">Close</button></DialogClose>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+function Label({ children }: { children: ReactNode }) { return <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{children}</span>; }
+function Party({ label, name, phone }: { label: string; name: string; phone: string }) { return <div><Label>{label}</Label><p className="mt-2 text-sm font-bold">{name || "Unknown"}</p><p className="text-xs text-slate-400">{phone || "—"}</p></div>; }
+function Info({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-4"><span className="text-slate-400 capitalize">{label}</span><span className="text-right font-medium break-all">{value}</span></div>; }
+function Badge({ value, color }: { value: string; color: "purple" | "red" | "green" | "blue" }) { const colors = { purple: "bg-purple-50 text-purple-600", red: "bg-rose-50 text-rose-600", green: "bg-emerald-50 text-emerald-600", blue: "bg-blue-50 text-blue-600" }; return <span className={`rounded-xl px-3 py-1.5 capitalize ${colors[color]}`}>{value}</span>; }

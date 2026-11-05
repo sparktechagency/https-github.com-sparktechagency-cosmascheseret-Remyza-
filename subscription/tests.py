@@ -256,6 +256,16 @@ class AdminSubscriptionAnalyticsAPIViewTests(TestCase):
         self.assertEqual(rows_by_user[self.trial_user.id]["plan"], "trial")
         self.assertFalse(rows_by_user[self.suspended_user.id]["is_active"])
 
+    def test_admin_subscriber_list_supports_search_plan_and_active_filters(self):
+        request = self.factory.get("/api/v1/admin/subscriptions/?search=active&plan=pro&is_active=true")
+        force_authenticate(request, user=self.admin)
+
+        response = AdminSubscriberListAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["count"], 1)
+        self.assertEqual(response.data["data"]["results"][0]["user_id"], self.active_user.id)
+
     def test_admin_subscriber_detail_returns_lifetime_spent_and_next_billing(self):
         request = self.factory.get(f"/api/v1/admin/subscriptions/{self.active_user.id}/")
         force_authenticate(request, user=self.admin)

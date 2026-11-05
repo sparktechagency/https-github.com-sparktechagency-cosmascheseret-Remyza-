@@ -1,389 +1,94 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import {
-  MessageSquare,
-  Zap,
-  CheckCircle2,
-  XCircle,
-  Search,
-  Download,
-  Bell,
-  ArrowUpRight,
-  ArrowDownLeft,
-} from "lucide-react";
-import DataTable, { ColumnDef } from "../../shared/CommonTable/Data-Table";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, MessageSquare, Search, XCircle } from "lucide-react";
+import DataTable, { type ColumnDef } from "../../shared/CommonTable/Data-Table";
 import CustomPagination from "../../shared/custom/custom-pagination";
-
-// Premium Modal Components Suite
 import { DetailViewExample } from "../../shared/Modals/DetailViewExample";
-import { SendFormExample } from "../../shared/Modals/SendFormExample";
 import { ConversationThreadModal } from "../../shared/Modals/ConversationThreadModal";
 import { UserProfileModal } from "../../shared/Modals/UserProfileModal";
+import { apiRequest, formatDate, formatNumber } from "@/lib/api";
+import type { AdminMessageDetail, AdminMessageListItem, ApiEnvelope } from "@/types/admin";
 
-interface MessageLogItem {
-  id: string;
-  user: string;
-  contactName: string;
-  contactPhone: string;
-  preview: string;
-  direction: "Sent" | "Received";
-  status: "Delivered" | "Failed";
-  timestamp: string;
-  isActive?: boolean;
+interface MessageListData {
+  summary: { total_messages: number; delivered_or_sent_messages: number; failed_messages: number };
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: AdminMessageListItem[];
 }
-
-const INITIAL_MOCK_LOGS: MessageLogItem[] = [
-  {
-    id: "MSG-9821",
-    user: "Alex Johnson",
-    contactName: "Chris Evans",
-    contactPhone: "+1 (555) 321-0987",
-    preview:
-      "Hi! I noticed you were looking at homes in the downtown area. Would you like to schedule a quick tour this weekend?",
-    direction: "Sent",
-    status: "Delivered",
-    timestamp: "May 12, 2026 10:23 AM",
-    isActive: true,
-  },
-  {
-    id: "MSG-9820",
-    user: "Sarah Jenkins",
-    contactName: "Jessica Alba",
-    contactPhone: "+1 (555) 871-4421",
-    preview:
-      "Thanks for the details! What is the minimum down payment required for the second property listed?",
-    direction: "Received",
-    status: "Delivered",
-    timestamp: "May 12, 2026 10:15 AM",
-    isActive: true,
-  },
-  {
-    id: "MSG-9819",
-    user: "Alex Johnson",
-    contactName: "Michael B.",
-    contactPhone: "+1 (555) 902-1182",
-    preview:
-      "Your automated valuation report is ready. Click the link to review your custom equity breakdown path.",
-    direction: "Sent",
-    status: "Delivered",
-    timestamp: "May 12, 2026 09:44 AM",
-    isActive: true,
-  },
-  {
-    id: "MSG-9818",
-    user: "David Miller",
-    contactName: "Robert Downey",
-    contactPhone: "+1 (555) 234-5678",
-    preview:
-      "Failed to establish a primary connection handshake with the local carrier gateway. Retrying drop sequence.",
-    direction: "Sent",
-    status: "Failed",
-    timestamp: "May 12, 2026 09:12 AM",
-    isActive: false,
-  },
-  {
-    id: "MSG-9817",
-    user: "Sarah Jenkins",
-    contactName: "Emma Watson",
-    contactPhone: "+1 (555) 765-4321",
-    preview:
-      "Perfect, let's lock in the Tuesday slot at 3 PM. Sending over the digital calendar invite links now.",
-    direction: "Sent",
-    status: "Delivered",
-    timestamp: "May 12, 2026 08:55 AM",
-    isActive: true,
-  },
-];
 
 export default function MessageLogs() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [userFilter, setUserFilter] = useState("All Users");
-  const [typeFilter, setTypeFilter] = useState("All Types");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [direction, setDirection] = useState("");
+  const [channel, setChannel] = useState("");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<MessageListData>({ summary: { total_messages: 0, delivered_or_sent_messages: 0, failed_messages: 0 }, count: 0, next: null, previous: null, results: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<AdminMessageDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [conversationOpen, setConversationOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const pageSize = 10;
 
-  // --- Modal Interactivity Management Orchestration Matrix ---
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [isConversationOpen, setIsConversationOpen] = useState(false);
-  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [selectedRowData, setSelectedRowData] = useState<MessageLogItem | null>(
-    null,
-  );
+  useEffect(() => { const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 350); return () => clearTimeout(timer); }, [search]);
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (status) params.set("status", status);
+    if (direction) params.set("direction", direction);
+    if (channel) params.set("channel", channel);
+    try { const response = await apiRequest<ApiEnvelope<MessageListData>>(`admin/messages/?${params}`); setData(response.data); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to load messages."); }
+    finally { setLoading(false); }
+  }, [page, debouncedSearch, status, direction, channel]);
+  useEffect(() => { void load(); }, [load]);
 
-  // Search & Filtering Log Logic
-  const filteredData = useMemo(() => {
-    return INITIAL_MOCK_LOGS.filter((item) => {
-      const matchesSearch =
-        item.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.contactPhone.includes(searchQuery) ||
-        item.preview.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesUser =
-        userFilter === "All Users" || item.user === userFilter;
-      const matchesType =
-        typeFilter === "All Types" || item.type === typeFilter;
-
-      return matchesSearch && matchesUser && matchesType;
-    });
-  }, [searchQuery, userFilter, typeFilter]);
-
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredData.slice(start, start + itemsPerPage);
-  }, [filteredData, currentPage]);
-
-  // Handle core row viewer callback mappings
-  const handleInspectRow = (row: MessageLogItem) => {
-    setSelectedRowData(row);
-    setIsDetailOpen(true);
+  const inspect = async (row: AdminMessageListItem) => {
+    setDetailOpen(true); setDetailLoading(true); setSelected(null);
+    try { const response = await apiRequest<ApiEnvelope<AdminMessageDetail>>(`admin/messages/${row.id}/`); setSelected(response.data); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to load message details."); setDetailOpen(false); }
+    finally { setDetailLoading(false); }
   };
+  const columns = useMemo<ColumnDef<AdminMessageListItem>[]>(() => [
+    { header: "ID", accessorKey: "id" },
+    { header: "User", accessorKey: "user", cell: (row) => <div><p className="font-bold text-slate-900">{row.user.name || "Unknown user"}</p><p className="text-[11px] text-slate-400">{row.user.phone}</p></div> },
+    { header: "Contact", accessorKey: "contact", cell: (row) => <div><p className="font-bold text-slate-900">{row.contact.name || "Unknown contact"}</p><p className="text-[11px] text-slate-400">{row.contact.phone}</p></div> },
+    { header: "Message", accessorKey: "message", cell: (row) => <p title={row.message} className="max-w-72 truncate text-slate-500">{row.message}</p> },
+    { header: "Direction", accessorKey: "direction", cell: (row) => <span className={`inline-flex items-center gap-1 font-bold capitalize ${row.direction.toLowerCase() === "sent" ? "text-blue-600" : "text-emerald-600"}`}>{row.direction.toLowerCase() === "sent" ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownLeft className="h-3.5 w-3.5" />}{row.direction}</span> },
+    { header: "Status", accessorKey: "status", cell: (row) => <span className={`rounded-lg px-2.5 py-1 text-[11px] font-bold capitalize ${row.status.toLowerCase() === "failed" ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}>{row.status}</span> },
+    { header: "Timestamp", accessorKey: "timestamp", cell: (row) => <span className="text-xs text-slate-400">{formatDate(row.timestamp)}</span> },
+    { header: "Action", accessorKey: "action", align: "right", showView: true, showDelete: false, showToggle: false },
+  ], []);
+  const totalPages = Math.max(1, Math.ceil(data.count / pageSize));
 
-  // Micro-timed frame delays for fluid visual modal context hand-offs
-  const handleTransitionToProfile = () => {
-    setIsDetailOpen(false);
-    setIsConversationOpen(false);
-    setTimeout(() => {
-      setIsUserProfileOpen(true);
-    }, 200);
-  };
-
-  const handleTransitionToConversation = () => {
-    setIsDetailOpen(false);
-    setIsUserProfileOpen(false);
-    setTimeout(() => {
-      setIsConversationOpen(true);
-    }, 200);
-  };
-
-  // Columns Layout Def mapping configurations
-  const columns: ColumnDef<MessageLogItem>[] = [
-    { header: "S.ID", accessorKey: "id" },
-    {
-      header: "User",
-      accessorKey: "user",
-      cell: (row) => (
-        <span className="font-bold text-[#0F172A]">{row.user}</span>
-      ),
-    },
-    {
-      header: "Contact",
-      accessorKey: "contactName",
-      cell: (row) => (
-        <div className="flex flex-col space-y-0.5 text-left">
-          <span className="font-bold text-[#0F172A]">{row.contactName}</span>
-          <span className="text-[11px] text-slate-400 font-medium">
-            {row.contactPhone}
-          </span>
-        </div>
-      ),
-    },
-    {
-      header: "Message Preview",
-      accessorKey: "preview",
-      cell: (row) => (
-        <p
-          className="text-slate-500 max-w-[240px] md:max-w-[320px] truncate font-medium text-left"
-          title={row.preview}
-        >
-          {row.preview}
-        </p>
-      ),
-    },
-    {
-      header: "Direction",
-      accessorKey: "direction",
-      cell: (row) => (
-        <span
-          className={`inline-flex items-center gap-1 font-bold ${
-            row.direction === "Sent" ? "text-blue-600" : "text-emerald-600"
-          }`}
-        >
-          {row.direction === "Sent" ? (
-            <ArrowUpRight className="h-3.5 w-3.5 stroke-[2.5]" />
-          ) : (
-            <ArrowDownLeft className="h-3.5 w-3.5 stroke-[2.5]" />
-          )}
-          <span>{row.direction}</span>
-        </span>
-      ),
-    },
-    {
-      header: "Status",
-      accessorKey: "status",
-      cell: (row) => (
-        <span
-          className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-            row.status === "Delivered"
-              ? "bg-emerald-50 text-emerald-600"
-              : "bg-rose-50 text-rose-600"
-          }`}
-        >
-          {row.status}
-        </span>
-      ),
-    },
-    {
-      header: "Timestamp",
-      accessorKey: "timestamp",
-      cell: (row) => (
-        <span className="text-slate-400 font-semibold text-xs whitespace-nowrap">
-          {row.timestamp}
-        </span>
-      ),
-    },
-    {
-      header: "Action",
-      accessorKey: "action",
-      align: "right",
-      showView: true,
-      showDelete: false,
-      showToggle: false,
-    },
-  ];
-
-  return (
-    <div className="w-full space-y-6 text-left bg-slate-50/50">
-      {/* Analytics Card Deck Display Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        <div className="bg-white rounded-[22px] border border-slate-100 p-5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between space-y-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-[#004BCE]">
-            <MessageSquare className="h-5 w-5" strokeWidth={2.2} />
-          </div>
-          <div>
-            <h4 className="text-2xl font-extrabold text-[#0F172A] tracking-tight">
-              48,291
-            </h4>
-            <p className="text-[13px] font-medium text-slate-400 mt-0.5">
-              Total Messages
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-[22px] border border-slate-100 p-5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between space-y-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-            <CheckCircle2 className="h-5 w-5" strokeWidth={2.2} />
-          </div>
-          <div>
-            <h4 className="text-2xl font-extrabold text-[#0F172A] tracking-tight">
-              46,109
-            </h4>
-            <p className="text-[13px] font-medium text-slate-400 mt-0.5">
-              Delivered
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-[22px] border border-slate-100 p-5 shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between space-y-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-            <XCircle className="h-5 w-5" strokeWidth={2.2} />
-          </div>
-          <div>
-            <h4 className="text-2xl font-extrabold text-[#0F172A] tracking-tight">
-              2,182
-            </h4>
-            <p className="text-[13px] font-medium text-slate-400 mt-0.5">
-              Failed
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Primary Context Container Block */}
-      <div className="bg-white rounded-[24px] border border-slate-100 shadow-[0_4px_16px_rgba(0,0,0,0.01)] overflow-hidden flex flex-col">
-        {/* Dynamic Filter Utilities Toolbar Segment */}
-        <div className="p-5 border-b border-slate-50 bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="relative w-full lg:max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Search by name, email or phone..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/30 text-xs font-semibold text-[#0F172A] focus:outline-none focus:border-[#004BCE] transition-all"
-            />
-          </div>
-
-        </div>
-
-        {/* Data Stream Render Table View */}
-        <div className="w-full remove-header-borders-override overflow-x-auto">
-          <DataTable
-            title="Message Tracking Stream"
-            columns={columns}
-            data={paginatedData}
-            onRowView={handleInspectRow}
-            onRowDelete={(row) =>
-              console.log("Deleting logging row record mapping:", row.id)
-            }
-            onStatusToggle={(row, checked) =>
-              console.log(
-                "Toggling stream verification tracer:",
-                row.id,
-                checked,
-              )
-            }
-          />
-        </div>
-
-        {/* Dynamic Pagination Matrix */}
-        <CustomPagination
-          currentPage={currentPage}
-          entriesPerPage={itemsPerPage}
-          totalEntries={filteredData.length}
-          onPageChange={(page) => setCurrentPage(page)}
-          totalPages={totalPages}
-          key={currentPage}
-        />
-
-        {/* ------------------------------------------------------------------
-            SYSTEM PORTAL INTERACTIVE MODALS LAYER (DECOUPLED AND MOUNTED)
-           ------------------------------------------------------------------ */}
-
-        {/* 1. Core Inspection Deep Details Context Viewer */}
-        <DetailViewExample
-          isOpen={isDetailOpen}
-          onClose={() => {
-            setIsDetailOpen(false);
-            setSelectedRowData(null);
-          }}
-          data={selectedRowData}
-          onViewUser={handleTransitionToProfile}
-          onViewConversation={handleTransitionToConversation}
-        />
-
-        {/* 2. Conversational Message Timeline Stream Modal */}
-        <ConversationThreadModal
-          isOpen={isConversationOpen}
-          onClose={() => {
-            setIsConversationOpen(false);
-            setSelectedRowData(null);
-          }}
-          onViewUser={handleTransitionToProfile}
-        />
-
-        {/* 3. Account Identity Metadata Metric Profile Portal */}
-        <UserProfileModal
-          isOpen={isUserProfileOpen}
-          onClose={() => {
-            setIsUserProfileOpen(false);
-            setSelectedRowData(null);
-          }}
-          onViewConversation={handleTransitionToConversation}
-        />
-
-        {/* 4. Global Push System Dispatch Broadcast Builder Form */}
-        <SendFormExample
-          isOpen={isNotificationOpen}
-          onClose={() => setIsNotificationOpen(false)}
-        />
-      </div>
+  return <div className="w-full space-y-6 bg-slate-50/50">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <SummaryCard icon={<MessageSquare className="h-5 w-5" />} value={data.summary.total_messages} label="Total Messages" color="blue" />
+      <SummaryCard icon={<CheckCircle2 className="h-5 w-5" />} value={data.summary.delivered_or_sent_messages} label="Delivered / Sent" color="green" />
+      <SummaryCard icon={<XCircle className="h-5 w-5" />} value={data.summary.failed_messages} label="Failed" color="red" />
     </div>
-  );
+    <div className="bg-white rounded-[24px] border border-slate-100 overflow-hidden">
+      <div className="p-5 border-b flex flex-col xl:flex-row gap-3">
+        <div className="relative flex-1"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search message, user, contact or phone..." className="w-full pl-10 pr-4 py-2.5 rounded-xl border text-xs font-semibold" /></div>
+        <Filter value={status} onChange={(value) => { setStatus(value); setPage(1); }} label="All statuses" options={["sent", "delivered", "failed", "received", "queued"]} />
+        <Filter value={direction} onChange={(value) => { setDirection(value); setPage(1); }} label="All directions" options={["sent", "received"]} />
+        <Filter value={channel} onChange={(value) => { setChannel(value); setPage(1); }} label="All channels" options={["sms", "rcs", "whatsapp"]} />
+      </div>
+      {error && <p className="px-6 py-3 text-sm text-rose-600 bg-rose-50">{error}</p>}
+      {loading ? <p className="p-10 text-center text-sm text-slate-400">Loading messages...</p> : <DataTable title="Message Logs" columns={columns} data={data.results} onRowView={(row) => void inspect(row)} />}
+      <CustomPagination currentPage={page} entriesPerPage={pageSize} totalEntries={data.count} totalPages={totalPages} onPageChange={setPage} itemLabel="messages" />
+    </div>
+    <DetailViewExample isOpen={detailOpen} onClose={() => setDetailOpen(false)} data={selected} loading={detailLoading} onViewUser={() => { setDetailOpen(false); setProfileOpen(true); }} onViewConversation={() => { setDetailOpen(false); setConversationOpen(true); }} />
+    <ConversationThreadModal isOpen={conversationOpen} onClose={() => setConversationOpen(false)} conversationId={selected?.conversation_id} onViewUser={() => { setConversationOpen(false); setProfileOpen(true); }} />
+    <UserProfileModal isOpen={profileOpen} onClose={() => setProfileOpen(false)} onViewConversation={() => { setProfileOpen(false); setConversationOpen(true); }} />
+  </div>;
 }
+
+function SummaryCard({ icon, value, label, color }: { icon: React.ReactNode; value: number; label: string; color: "blue" | "green" | "red" }) { const colors = { blue: "bg-blue-50 text-blue-600", green: "bg-emerald-50 text-emerald-600", red: "bg-rose-50 text-rose-600" }; return <div className="bg-white rounded-[22px] border p-5 space-y-4"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${colors[color]}`}>{icon}</div><div><h4 className="text-2xl font-extrabold">{formatNumber(value)}</h4><p className="text-[13px] text-slate-400">{label}</p></div></div>; }
+function Filter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-xl border px-3 py-2.5 text-xs font-semibold capitalize"><option value="">{label}</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>; }

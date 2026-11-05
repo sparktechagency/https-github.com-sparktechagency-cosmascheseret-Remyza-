@@ -1,38 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LegalRichTextEditor from "./LegalRichTextEditor";
+import { apiRequest } from "@/lib/api";
 
-interface LegalDocumentSettingsProps {
-  title: string;
-  description: string;
-  initialContent: string;
-}
-
-export default function LegalDocumentSettings({ title, description, initialContent }: LegalDocumentSettingsProps) {
-  const [content, setContent] = useState(initialContent);
-  const [isSaved, setIsSaved] = useState(false);
-
-  const saveDocument = () => {
-    // This HTML is ready to map directly to the CKEditor 5 field sent to Django.
-    console.log(`Saved ${title}:`, content);
-    setIsSaved(true);
-    window.setTimeout(() => setIsSaved(false), 2500);
-  };
-
-  return (
-    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-      <header className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div>
-          <h2 className="text-xl font-bold text-[#0F172A]">{title}</h2>
-          <p className="mt-1 text-sm text-[#64748B]">{description}</p>
-        </div>
-        <button type="button" onClick={saveDocument} className="rounded-xl bg-[#0052CC] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#003D99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0052CC]">Save changes</button>
-      </header>
-      <div className="p-5 sm:p-6">
-        <LegalRichTextEditor value={content} onChange={setContent} />
-        <p aria-live="polite" className="mt-3 min-h-5 text-sm text-[#00A86B]">{isSaved ? `${title} saved.` : ""}</p>
-      </div>
-    </section>
-  );
-}
+interface Props { title: string; description: string; initialContent: string; publicPath: string; adminPath: string; }
+export default function LegalDocumentSettings({ title, description, initialContent, publicPath, adminPath }: Props) { const [content, setContent] = useState(initialContent); const [message, setMessage] = useState(""); const [saving, setSaving] = useState(false); useEffect(() => { apiRequest<{ content: string }>(publicPath).then((response) => setContent(response?.content || initialContent)).catch((err) => setMessage(err.message)); }, [publicPath, initialContent]); const save = async () => { setSaving(true); setMessage(""); try { const response = await apiRequest<{ content: string }>(adminPath, { method: "PATCH", body: JSON.stringify({ content }) }); setContent(response.content); setMessage(`${title} saved.`); } catch (err) { setMessage(err instanceof Error ? err.message : `Unable to save ${title}.`); } finally { setSaving(false); } }; return <section className="rounded-2xl border bg-white"><header className="flex items-center justify-between border-b px-6 py-5"><div><h2 className="text-xl font-bold">{title}</h2><p className="text-sm text-slate-500">{description}</p></div><button disabled={saving} onClick={() => void save()} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save changes"}</button></header><div className="p-6"><LegalRichTextEditor value={content} onChange={setContent} /><p className="mt-3 min-h-5 text-sm text-blue-600">{message}</p></div></section>; }

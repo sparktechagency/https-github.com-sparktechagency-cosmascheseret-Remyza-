@@ -1,10 +1,16 @@
 "use client";
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDashboard } from "@/providers/DashboardStateProvider";
 import NotificationDropdown from "../Modals/NotificationModal";
+import { apiRequest } from "@/lib/api";
+import type { ApiEnvelope } from "@/types/admin";
 
 export default function DashboardNavbar() {
+  const [adminName, setAdminName] = useState("Admin");
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  useEffect(() => { apiRequest<ApiEnvelope<{ full_name: string; profile_picture: string | null }>>("admin/profile/").then((response) => { setAdminName(response.data.full_name || "Admin"); setProfilePicture(response.data.profile_picture); }).catch(() => undefined); }, []);
   const {
     pageTitle,
     setSidebarOpen,
@@ -35,7 +41,7 @@ export default function DashboardNavbar() {
         <div className="flex items-center gap-6">
           {/* Date (Hidden on small mobile viewports for clean layout) */}
           <p className="hidden text-sm font-medium text-[#64748B] sm:block">
-            Tuesday, May 12, 2026
+            {new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())}
           </p>
 
           <div className="flex items-center gap-4">
@@ -43,9 +49,7 @@ export default function DashboardNavbar() {
             <NotificationDropdown />
 
             {/* User Avatar Circle */}
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#0052CC] bg-[#E6F0FF] text-sm font-bold text-[#0052CC]">
-              SA
-            </div>
+            {profilePicture ? <img src={profilePicture} alt={adminName} className="h-10 w-10 rounded-full border-2 border-[#0052CC] object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#0052CC] bg-[#E6F0FF] text-sm font-bold text-[#0052CC]">{adminName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>}
           </div>
         </div>
       </nav>

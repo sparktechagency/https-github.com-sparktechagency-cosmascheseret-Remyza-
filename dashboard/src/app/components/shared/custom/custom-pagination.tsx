@@ -1,71 +1,7 @@
 "use client";
 
-import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-interface PaginationProps {
-  currentPage: number;
-  totalPages: number;
-  totalEntries: number;
-  entriesPerPage: number;
-  onPageChange: (page: number) => void;
-}
-
-export default function CustomPagination({
-  currentPage,
-  totalPages,
-  totalEntries,
-  entriesPerPage,
-  onPageChange,
-}: PaginationProps) {
-  const startEntry = (currentPage - 1) * entriesPerPage + 1;
-  const endEntry = Math.min(currentPage * entriesPerPage, totalEntries);
-
-  return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-5 border-t border-slate-50 bg-white rounded-b-2xl">
-      {/* Informational Range Text */}
-      <p className="text-[13px] font-medium text-[#64748B]">
-        Showing {totalEntries === 0 ? 0 : startEntry}–{endEntry} of{" "}
-        <span className="font-semibold text-[#0F172A]">{totalEntries}</span> users
-      </p>
-
-      {/* Interactive Controller Buttons */}
-      <div className="flex items-center gap-2">
-        {/* Previous Button */}
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
-          aria-label="Previous Page"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-
-        {/* Page Number Button Indicators */}
-        {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
-          <button
-            key={page}
-            onClick={() => onPageChange(page)}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-semibold transition-all ${
-              currentPage === page
-                ? "bg-[#004BCE] text-white shadow-sm"
-                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {page}
-          </button>
-        ))}
-
-        {/* Next Button */}
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
-          aria-label="Next Page"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
+interface Props { currentPage: number; totalPages: number; totalEntries: number; entriesPerPage: number; onPageChange: (page: number) => void; itemLabel?: string; }
+export default function CustomPagination({ currentPage, totalPages, totalEntries, entriesPerPage, onPageChange, itemLabel = "items" }: Props) { const start = (currentPage - 1) * entriesPerPage + 1; const end = Math.min(currentPage * entriesPerPage, totalEntries); const pages = Array.from({ length: Math.max(1, totalPages) }, (_, index) => index + 1).filter((page) => totalPages <= 7 || page === 1 || page === totalPages || Math.abs(page - currentPage) <= 2); return <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-5 border-t bg-white"><p className="text-[13px] text-slate-500">Showing {totalEntries ? start : 0}–{end} of <b className="text-slate-900">{totalEntries}</b> {itemLabel}</p><div className="flex items-center gap-2"><Button disabled={currentPage <= 1} label="Previous page" onClick={() => onPageChange(currentPage - 1)}><ChevronLeft className="h-4 w-4" /></Button>{pages.map((page, index) => <span key={page} className="flex items-center gap-2">{index > 0 && page - pages[index - 1] > 1 && <span className="text-slate-400">…</span>}<button onClick={() => onPageChange(page)} className={`h-8 min-w-8 rounded-lg px-2 text-xs font-semibold ${page === currentPage ? "bg-blue-600 text-white" : "border text-slate-600"}`}>{page}</button></span>)}<Button disabled={currentPage >= totalPages} label="Next page" onClick={() => onPageChange(currentPage + 1)}><ChevronRight className="h-4 w-4" /></Button></div></div>; }
+function Button({ children, disabled, label, onClick }: { children: React.ReactNode; disabled: boolean; label: string; onClick: () => void }) { return <button disabled={disabled} aria-label={label} onClick={onClick} className="flex h-8 w-8 items-center justify-center rounded-lg border disabled:opacity-40">{children}</button>; }

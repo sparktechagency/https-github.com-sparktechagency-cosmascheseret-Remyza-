@@ -423,6 +423,9 @@ class AdminSubscriberListAPIView(AdminSubscriptionAnalyticsMixin, APIView):
         summary="List subscribers and subscription revenue summary",
         description="Returns admin subscription dashboard metrics and a paginated subscriber list with plan, billing, active status, and joined date.",
         parameters=[
+            OpenApiParameter("search", str, required=False, description="Search by subscriber name, email, or phone number."),
+            OpenApiParameter("plan", str, required=False, description="Filter by `pro`, `trial`, or `free`."),
+            OpenApiParameter("is_active", bool, required=False, description="Filter active or suspended user accounts."),
             OpenApiParameter("page", int, required=False, description="Page number."),
             OpenApiParameter("page_size", int, required=False, description="Items per page, up to 100."),
         ],
@@ -430,6 +433,22 @@ class AdminSubscriberListAPIView(AdminSubscriptionAnalyticsMixin, APIView):
     )
     def get(self, request):
         queryset = self.subscriber_queryset()
+        search = (request.query_params.get("search") or "").strip()
+        plan = (request.query_params.get("plan") or "").strip().lower()
+        is_active = (request.query_params.get("is_active") or "").strip().lower()
+
+        if search:
+            queryset = queryset.filter(
+                Q(full_name__icontains=search)
+                | Q(email__icontains=search)
+                | Q(phone_number__icontains=search)
+            )
+        if is_active in {"true", "false"}:
+            queryset = queryset.filter(status=Status.ACTIVE) if is_active == "true" else queryset.exclude(status=Status.ACTIVE)
+        if plan in {"pro", "trial", "free"}:
+            matching_ids = [user.id for user in queryset if self.get_user_plan(self.get_latest_subscription(user)) == plan]
+            queryset = queryset.filter(id__in=matching_ids)
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request, view=self)
         results = [self.serialize_subscriber(user, request) for user in page]

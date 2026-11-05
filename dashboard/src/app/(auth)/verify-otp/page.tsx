@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Shield, RotateCcw } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
+import { apiRequest } from "@/lib/api";
 
 export default function VerifyOtpPage() {
   const router = useRouter();
-  const { resetEmail } = useAuth();
+  const { resetEmail, setResetToken } = useAuth();
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -70,27 +71,27 @@ export default function VerifyOtpPage() {
 
     setIsLoading(true);
 
-    // Simulate API verification
-    setTimeout(() => {
-      // For demo, any 6-digit code works (use 123456 or similar)
-      if (otpValue === "123456" || otpValue === "000000") {
-        router.push("/reset-password");
-      } else {
-        setError("Invalid verification code. Try 123456 for demo");
-        setOtp(["", "", "", "", "", ""]);
-        inputRefs.current[0]?.focus();
-      }
+    try {
+      const response = await apiRequest<{ success: boolean; reset_token: string }>("admin/auth/password-reset/verify/", { method: "POST", body: JSON.stringify({ email: resetEmail, otp: otpValue }) });
+      setResetToken(response.reset_token);
+      router.push("/reset-password");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Invalid or expired verification code.");
+      setOtp(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
+    if (!resetEmail) return;
     setCanResend(false);
     setResendTimer(60);
     setError("");
     setOtp(["", "", "", "", "", ""]);
-    // Simulate resending OTP
-    setError("");
+    try { await apiRequest("admin/auth/password-reset/request/", { method: "POST", body: JSON.stringify({ email: resetEmail }) }); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to resend the code."); }
   };
 
   return (
@@ -183,7 +184,7 @@ export default function VerifyOtpPage() {
           {/* Resend Section */}
           <div className="mt-6 pt-6 border-t border-slate-200">
             <p className="text-sm text-slate-600 font-inter text-center mb-4">
-              Didn't receive the code?
+              Didn&apos;t receive the code?
             </p>
             {canResend ? (
               <button

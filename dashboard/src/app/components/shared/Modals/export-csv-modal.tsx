@@ -6,37 +6,45 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // Available Exportable Columns Blueprint Configuration
 const AVAILABLE_COLUMNS = [
-  { id: "sid", label: "User ID" },
-  { id: "name", label: "Full Name" },
+  { id: "user_id", label: "User ID" },
+  { id: "full_name", label: "Full Name" },
   { id: "email", label: "Email Address" },
   { id: "phone", label: "Phone Number" },
-  { id: "company", label: "Business Name" },
+  { id: "business_name", label: "Business Name" },
+  { id: "business_type", label: "Business Type" },
   { id: "plan", label: "Plan" },
   { id: "status", label: "Status" },
-  { id: "messages", label: "Messages Sent" },
-  { id: "leads", label: "Leads Generated" },
-  { id: "joined", label: "Joined Date" },
+  { id: "messages_sent_count", label: "Messages Sent" },
+  { id: "leads_count", label: "Leads Generated" },
+  { id: "joined_date", label: "Joined Date" },
+  { id: "last_active", label: "Last Active" },
+  { id: "chesera_number", label: "Chesera Number" },
 ];
 
 interface ExportCsvModalProps {
   isOpen: boolean;
   onClose: () => void;
-  dataToExport: any[];
+  dataToExport?: unknown[];
+  totalRecords?: number;
   onConfirm: (config: {
     fileFormat: string;
     delimiter: string;
     columns: string[];
-  }) => void;
+    dateRange: string;
+  }) => void | Promise<void>;
 }
 
 export default function ExportCsvModal({
   isOpen,
   onClose,
-  dataToExport,
   onConfirm,
+  dataToExport = [],
+  totalRecords,
 }: ExportCsvModalProps) {
+  const recordCount = totalRecords ?? dataToExport.length;
   const [fileFormat, setFileFormat] = useState<"csv" | "xlsx">("csv");
-  const [delimiter, setDelimiter] = useState<"," | ";">(",");
+  const [delimiter, setDelimiter] = useState<"comma" | "semicolon" | "tab">("comma");
+  const [dateRange, setDateRange] = useState("all_time");
   const [selectedColumns, setSelectedColumns] = useState<string[]>(
     AVAILABLE_COLUMNS.map((col) => col.id),
   );
@@ -60,7 +68,7 @@ export default function ExportCsvModal({
     }
   };
 
-  const triggerDownloadProcess = () => {
+  const triggerDownloadProcess = async () => {
     if (selectedColumns.length === 0) {
       alert(
         "Please select at least one column to include in the export configuration.",
@@ -68,44 +76,7 @@ export default function ExportCsvModal({
       return;
     }
 
-    // Isolate active column structures
-    const activeHeaders = AVAILABLE_COLUMNS.filter((col) =>
-      selectedColumns.includes(col.id),
-    );
-
-    // Construct Top Row Headers Layout Text String
-    const headerRow =
-      activeHeaders.map((h) => `"${h.label}"`).join(delimiter) + "\n";
-
-    // Format individual table payload entities dynamically
-    const contentRows = dataToExport
-      .map((row) => {
-        return activeHeaders
-          .map((h) => {
-            const value = row[h.id] ?? "";
-            return `"${String(value).replace(/"/g, '""')}"`;
-          })
-          .join(delimiter);
-      })
-      .join("\n");
-
-    const completeFilePayload = headerRow + contentRows;
-    const blobType =
-      fileFormat === "csv"
-        ? "text/csv;charset=utf-8;"
-        : "application/vnd.ms-excel;charset=utf-8;";
-
-    // Dispatch system browser anchor triggers
-    const blob = new Blob([completeFilePayload], { type: blobType });
-    const url = URL.createObjectURL(blob);
-    const downloadAnchor = document.createElement("a");
-
-    downloadAnchor.setAttribute("href", url);
-    downloadAnchor.setAttribute("download", generatedFileName);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    document.body.removeChild(downloadAnchor);
-    onClose();
+    await onConfirm({ fileFormat, delimiter, columns: selectedColumns, dateRange });
   };
 
   return (
@@ -121,7 +92,7 @@ export default function ExportCsvModal({
                 Export CSV
               </DialogTitle>
               <p className="text-xs font-medium text-slate-400 mt-0.5">
-                Users — {dataToExport.length} records available
+                Users — {recordCount} records available
               </p>
             </div>
           </div>
@@ -202,13 +173,14 @@ export default function ExportCsvModal({
             </label>
             <div className="flex gap-2">
               {[
-                { label: "Comma ( , )", val: "," },
-                { label: "Semicolon ( ; )", val: ";" },
+                { label: "Comma ( , )", val: "comma" },
+                { label: "Semicolon ( ; )", val: "semicolon" },
+                { label: "Tab", val: "tab" },
               ].map((d) => (
                 <button
                   key={d.val}
                   type="button"
-                  onClick={() => setDelimiter(d.val as any)}
+                  onClick={() => setDelimiter(d.val as "comma" | "semicolon" | "tab")}
                   className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
                     delimiter === d.val
                       ? "border-[#0052CC] bg-[#EFF6FF] text-[#0052CC]"
@@ -219,6 +191,15 @@ export default function ExportCsvModal({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#64748B]">Joined Date Range</label>
+            <select value={dateRange} onChange={(event) => setDateRange(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100">
+              <option value="all_time">All time</option>
+              <option value="last_week">Last 7 days</option>
+              <option value="last_month">Last 30 days</option>
+            </select>
           </div>
 
           {/* Option Segment C: Column Checklist Selection Deck */}
@@ -286,7 +267,7 @@ export default function ExportCsvModal({
                 {generatedFileName}
               </p>
               <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                {dataToExport.length} rows • {selectedColumns.length} columns •{" "}
+                {recordCount} rows • {selectedColumns.length} columns •{" "}
                 {fileFormat.toUpperCase()}
               </p>
             </div>

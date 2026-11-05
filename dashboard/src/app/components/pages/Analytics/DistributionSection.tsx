@@ -1,107 +1,17 @@
 "use client";
 
-import * as React from "react";
-import { ArrowUpRight } from "lucide-react";
+import { formatNumber } from "@/lib/api";
 
-export function DistributionSection() {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full">
-      
-      {/* Subscription Breakdown Ring Visual */}
-      <div className="bg-white border border-slate-100 rounded-[22px] p-6 shadow-xs flex flex-col justify-between">
-        <div>
-          <h3 className="text-base font-bold text-[#0F172A] tracking-tight mb-4">Subscription Breakdown</h3>
-          <div className="relative flex items-center justify-center h-44 w-full">
-            {/* Embedded Inline Explicit SVG Ring Graphic */}
-            <svg className="w-36 h-36 transform -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#E2E8F0" strokeWidth="11" />
-              {/* Pro Segment - 57% */}
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#0052CC" strokeWidth="11" 
-                strokeDasharray="251.2" strokeDashoffset={251.2 * (1 - 0.57)} strokeLinecap="round" />
-              {/* Free Segment - 37% (offset by Pro 57%) */}
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#94A3B8" strokeWidth="11" 
-                strokeDasharray="251.2" strokeDashoffset={251.2 * (1 - 0.37)} transform="rotate(205 50 50)" />
-              {/* Trial Segment - 6% */}
-              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#22C55E" strokeWidth="11" 
-                strokeDasharray="251.2" strokeDashoffset={251.2 * (1 - 0.06)} transform="rotate(338 50 50)" />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-xl font-black text-[#0F172A] tracking-tight">2,108</span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Total</span>
-            </div>
-          </div>
-        </div>
+interface Item { label: string; count: number; percent: number; change_percent?: number }
 
-        {/* Legend metrics mapping list */}
-        <div className="space-y-2 mt-4 text-xs font-bold">
-          <div className="flex items-center justify-between text-slate-600">
-            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-[#0052CC]" /><span>Pro</span></div>
-            <div>1,204 <span className="text-slate-400 font-medium ml-1">57%</span></div>
-          </div>
-          <div className="flex items-center justify-between text-slate-600">
-            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-[#22C55E]" /><span>Trial</span></div>
-            <div>124 <span className="text-slate-400 font-medium ml-1">6%</span></div>
-          </div>
-          <div className="flex items-center justify-between text-slate-600">
-            <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-[#94A3B8]" /><span>Free</span></div>
-            <div>780 <span className="text-slate-400 font-medium ml-1">37%</span></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Lead Status Progress Rails Layout Block */}
-      <div className="bg-white border border-slate-100 rounded-[22px] p-6 shadow-xs lg:col-span-2 flex flex-col justify-between">
-        <div>
-          <h3 className="text-base font-bold text-[#0F172A] tracking-tight mb-5">Lead Status Distribution</h3>
-          
-          <div className="space-y-4">
-            {/* Row 1 */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-500" /><span className="text-slate-600">Hot Leads</span></div>
-                <div className="text-[#0F172A]">2,834 <span className="text-slate-400 font-medium ml-1">30%</span></div>
-              </div>
-              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-rose-500 rounded-full" style={{ width: "30%" }} />
-              </div>
-            </div>
-
-            {/* Row 2 */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500" /><span className="text-slate-600">Warm Leads</span></div>
-                <div className="text-[#0F172A]">3,788 <span className="text-slate-400 font-medium ml-1">40%</span></div>
-              </div>
-              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500 rounded-full" style={{ width: "40%" }} />
-              </div>
-            </div>
-
-            {/* Row 3 */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-slate-600">Cold Leads</span></div>
-                <div className="text-[#0F172A]">2,849 <span className="text-slate-400 font-medium ml-1">30%</span></div>
-              </div>
-              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full" style={{ width: "30%" }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Total Aggregate Footer Card Segment */}
-        <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Leads</span>
-            <span className="text-xl font-black text-[#0F172A] tracking-tight block">9,471</span>
-            <span className="inline-flex items-center gap-0.5 text-[11px] font-extrabold text-emerald-600 mt-0.5">
-              <ArrowUpRight className="h-3 w-3 stroke-[2.5]" /> +18% this month
-            </span>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  );
+export function DistributionSection({ subscribers, leads }: { subscribers: Item[]; leads: Item[] }) {
+  const totalSubscribers = subscribers.reduce((sum, item) => sum + item.count, 0);
+  const totalLeads = leads.reduce((sum, item) => sum + item.count, 0);
+  return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <Panel title="Subscription Breakdown" total={totalSubscribers}>{subscribers.map((item, index) => <DistributionRow key={item.label} item={item} color={["bg-blue-600", "bg-emerald-500", "bg-slate-400"][index % 3]} />)}</Panel>
+    <Panel title="Lead Status Distribution" total={totalLeads}>{leads.map((item) => <DistributionRow key={item.label} item={item} color={item.label.toLowerCase().includes("hot") ? "bg-rose-500" : item.label.toLowerCase().includes("warm") ? "bg-amber-500" : "bg-blue-500"} />)}</Panel>
+  </div>;
 }
+
+function Panel({ title, total, children }: { title: string; total: number; children: React.ReactNode }) { return <div className="bg-white border rounded-[22px] p-6"><div className="flex justify-between mb-5"><h3 className="font-bold">{title}</h3><div className="text-right"><p className="text-xl font-black">{formatNumber(total)}</p><p className="text-[10px] uppercase text-slate-400">Total</p></div></div><div className="space-y-4">{children}</div></div>; }
+function DistributionRow({ item, color }: { item: Item; color: string }) { const width = Math.min(100, Math.max(0, item.percent)); return <div className="space-y-1.5"><div className="flex justify-between text-xs font-bold"><span className="capitalize text-slate-600">{item.label.replaceAll("_", " ")}</span><span>{formatNumber(item.count)} <span className="text-slate-400">{item.percent.toFixed(1)}%</span></span></div><div className="h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} /></div></div>; }

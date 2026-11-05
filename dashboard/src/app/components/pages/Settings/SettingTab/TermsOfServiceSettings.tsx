@@ -13,5 +13,5 @@ const termsOfServiceContent = `
 `;
 
 export default function TermsOfServiceSettings() {
-  return <LegalDocumentSettings title="Terms of Service" description="Edit the terms content stored in your CKEditor 5 field." initialContent={termsOfServiceContent} />;
+  return <LegalDocumentSettings title="Terms of Service" description="Edit the terms content stored in your CKEditor 5 field." initialContent={termsOfServiceContent} publicPath="terms/" adminPath="admin/terms/" />;
 }

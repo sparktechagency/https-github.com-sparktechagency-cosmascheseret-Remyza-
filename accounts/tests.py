@@ -24,6 +24,9 @@ from accounts.views import (
     CurrentUserAPIView,
     CurrentUserCheseraNumberAPIView,
     CurrentUserPlanAndProgressAPIView,
+    PasswordResetConfirmAPIView,
+    PasswordResetRequestAPIView,
+    PasswordResetVerifyAPIView,
 )
 from business.models import Organization
 from common.choices import Status
@@ -32,6 +35,69 @@ from crm.models import Lead
 from subscription.models import UserSubscription
 from sentdm.choices import SentDMCampaignStatus, SentDMMessageDirection, SentDMProfileStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from sentdm.models import SentDMCampaign, SentDMMessage, SentDMProfile
+
+
+class AdminPasswordResetAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.admin = User.objects.create_user(
+            phone_number="+15550001111",
+            email="admin@example.com",
+            password="OldStrongPass123!",
+            is_staff=True,
+            user_type="ADMIN",
+            status=Status.ACTIVE,
+        )
+
+    @patch("accounts.views.send_password_reset_otp_email")
+    def test_admin_can_complete_email_password_reset_once(self, mocked_send):
+        request = self.factory.post(
+            "/api/v1/admin/auth/password-reset/request/",
+            {"email": "ADMIN@example.com"},
+            format="json",
+        )
+        response = PasswordResetRequestAPIView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        otp = OTPVerification.objects.get(user=self.admin, purpose=OTPPurpose.PASSWORD_RESET)
+        mocked_send.assert_called_once_with(email="admin@example.com", otp=otp.otp_code)
+
+        request = self.factory.post(
+            "/api/v1/admin/auth/password-reset/verify/",
+            {"email": "admin@example.com", "otp": otp.otp_code},
+            format="json",
+        )
+        response = PasswordResetVerifyAPIView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        token = response.data["reset_token"]
+
+        payload = {
+            "reset_token": token,
+            "new_password": "NewStrongPass456!",
+            "confirm_new_password": "NewStrongPass456!",
+        }
+        response = PasswordResetConfirmAPIView.as_view()(
+            self.factory.post("/api/v1/admin/auth/password-reset/confirm/", payload, format="json")
+        )
+        self.assertEqual(response.status_code, 200)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("NewStrongPass456!"))
+
+        replay = PasswordResetConfirmAPIView.as_view()(
+            self.factory.post("/api/v1/admin/auth/password-reset/confirm/", payload, format="json")
+        )
+        self.assertEqual(replay.status_code, 400)
+
+    @patch("accounts.views.send_password_reset_otp_email")
+    def test_unknown_email_returns_generic_success_without_sending(self, mocked_send):
+        response = PasswordResetRequestAPIView.as_view()(
+            self.factory.post(
+                "/api/v1/admin/auth/password-reset/request/",
+                {"email": "missing@example.com"},
+                format="json",
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        mocked_send.assert_not_called()
 
 
 

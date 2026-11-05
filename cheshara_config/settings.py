@@ -316,6 +316,8 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "client_login_otp": os.getenv("CLIENT_LOGIN_OTP_THROTTLE_RATE", "5/hour"),
     "client_verify_otp": os.getenv("CLIENT_VERIFY_OTP_THROTTLE_RATE", "10/hour"),
     "admin_login": os.getenv("ADMIN_LOGIN_THROTTLE_RATE", "10/hour"),
+      "password_reset": os.getenv("PASSWORD_RESET_THROTTLE_RATE", "5/hour"),
+      "password_reset_verify": os.getenv("PASSWORD_RESET_VERIFY_THROTTLE_RATE", "10/hour"),
 }
 
 # Channels / WebSocket notifications

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Mail, Check } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
+import { apiRequest } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -31,19 +32,16 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
-      // Store email in context for next step
-      setResetEmail(email);
+    try {
+      await apiRequest<{ success: boolean; message: string }>("admin/auth/password-reset/request/", { method: "POST", body: JSON.stringify({ email }) });
+      setResetEmail(email.trim().toLowerCase());
       setIsSubmitted(true);
-
-      // Redirect to OTP verification after 2 seconds
-      setTimeout(() => {
-        router.push("/verify-otp");
-      }, 2000);
-
+      router.push("/verify-otp");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to request a reset code.");
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -104,13 +102,13 @@ export default function ForgotPasswordPage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="alamin@gmail.com"
+                      placeholder="admin@example.com"
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-slate-900 placeholder-slate-400"
                       disabled={isLoading}
                     />
                   </div>
                   <p className="text-xs text-slate-500 font-inter">
-                    We'll send a verification code to this email
+                    We&apos;ll send a verification code to this email
                   </p>
                 </div>
 
@@ -132,7 +130,7 @@ export default function ForgotPasswordPage() {
               </form>
 
               {/* Help Text */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <div className="hidden">
                 <p className="text-sm text-blue-900 font-inter">
                   💡 <strong>Tip:</strong> Use{" "}
                   <code className="bg-blue-100 px-2 py-1 rounded font-mono text-xs">
@@ -152,7 +150,7 @@ export default function ForgotPasswordPage() {
                   Check Your Email
                 </h2>
                 <p className="text-slate-600 font-inter">
-                  We've sent a verification code to <strong>{email}</strong>
+                  We&apos;ve sent a verification code to <strong>{email}</strong>
                 </p>
               </div>
               <div className="pt-2 text-sm text-slate-500 font-inter">

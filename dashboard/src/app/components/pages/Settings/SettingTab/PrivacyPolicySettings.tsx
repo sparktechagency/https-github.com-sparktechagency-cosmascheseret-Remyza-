@@ -13,5 +13,5 @@ const privacyPolicyContent = `
 `;
 
 export default function PrivacyPolicySettings() {
-  return <LegalDocumentSettings title="Privacy Policy" description="Edit the policy content stored in your CKEditor 5 field." initialContent={privacyPolicyContent} />;
+  return <LegalDocumentSettings title="Privacy Policy" description="Edit the policy content stored in your CKEditor 5 field." initialContent={privacyPolicyContent} publicPath="privacy/" adminPath="admin/privacy/" />;
 }

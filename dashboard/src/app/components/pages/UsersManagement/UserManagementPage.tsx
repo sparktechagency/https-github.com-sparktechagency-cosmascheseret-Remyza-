@@ -1,488 +1,120 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Search, ChevronDown, Download } from "lucide-react";
-import DataTable, { ColumnDef } from "../../shared/CommonTable/Data-Table";
-import CustomPagination from "../../shared/custom/custom-pagination";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, Download, Search } from "lucide-react";
+
+import { apiRequest, formatDate, formatNumber } from "@/lib/api";
+import type { AdminUserDetail, AdminUserListItem, AdminUserSummary, ApiEnvelope, PaginatedData } from "@/types/admin";
 import { useDashboard } from "@/providers/DashboardStateProvider";
+import DataTable, { type ColumnDef } from "../../shared/CommonTable/Data-Table";
+import CustomPagination from "../../shared/custom/custom-pagination";
+import DeleteUserModal from "../../shared/Modals/DeleteUserModal";
 import ExportCsvModal from "../../shared/Modals/export-csv-modal";
 import UserDetailsModal from "../../shared/Modals/user-details-modal";
-import DeleteUserModal from "../../shared/Modals/DeleteUserModal";
 
-// User Data Struct Contract
-interface UserManagementRow {
-  id: string;
-  sid: string;
-  name: string;
-  company: string;
-  email: string;
-  phone: string;
-  plan: "Pro" | "Enterprise" | "Free";
-  messages: string;
-  leads: number;
-  status: "Active" | "Blocked" | "Trial";
-  joined: string;
-  isActive: boolean;
-}
+type UserRow = AdminUserListItem & { isActive: boolean; display_status: "Active" | "Blocked" | "Trial" };
+type UsersResponse = ApiEnvelope<PaginatedData<AdminUserListItem> & { summary: AdminUserSummary }>;
 
-// Complete dataset generated exactly from your design image reference rows
-const initialDataset: UserManagementRow[] = [
-  {
-    id: "1",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Active",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-  {
-    id: "2",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Trial",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-  {
-    id: "3",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Blocked",
-    joined: "Jan 15, 2026",
-    isActive: false,
-  },
-  {
-    id: "4",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Active",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-  {
-    id: "5",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Active",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-  {
-    id: "6",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Blocked",
-    joined: "Jan 15, 2026",
-    isActive: false,
-  },
-  {
-    id: "7",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Active",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-  {
-    id: "8",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Trial",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-  {
-    id: "9",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Blocked",
-    joined: "Jan 15, 2026",
-    isActive: false,
-  },
-  {
-    id: "10",
-    sid: "USR-001",
-    name: "Alex Johnson",
-    company: "Johnson Realty",
-    email: "alex@johnsonrealty.com",
-    phone: "+1 (555) 234-5678",
-    plan: "Pro",
-    messages: "1,247",
-    leads: 89,
-    status: "Active",
-    joined: "Jan 15, 2026",
-    isActive: true,
-  },
-];
+const EMPTY_SUMMARY: AdminUserSummary = { total_users: 0, total_active: 0, total_blocked: 0, total_on_trial: 0 };
+const PAGE_SIZE = 10;
 
 export default function UserManagement() {
-  const [data, setData] = useState<UserManagementRow[]>(initialDataset);
+  const [rows, setRows] = useState<UserRow[]>([]);
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [plan, setPlan] = useState("");
+  const [activeFilter, setActiveFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const requestSequence = useRef(0);
+  const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { isExportModalOpen, setIsExportModalOpen, isViewModalOpen, setIsViewModalOpen } = useDashboard();
 
-  // Filtering States
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPlan, setSelectedPlan] = useState("All Plans");
-  const [selectedStatus, setSelectedStatus] = useState("All Status");
+  const loadUsers = useCallback(async () => {
+    const sequence = ++requestSequence.current;
+    setLoading(true);
+    setError("");
+    const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
+    if (search.trim()) params.set("search", search.trim());
+    if (plan) params.set("plan", plan);
+    if (activeFilter) params.set("is_active", activeFilter);
+    try {
+      const response = await apiRequest<UsersResponse>(`admin/users/?${params}`);
+      if (sequence !== requestSequence.current) return;
+      setRows(response.data.results.map((user) => ({ ...user, isActive: user.is_active, display_status: !user.is_active ? "Blocked" : user.plan === "trial" ? "Trial" : "Active" })));
+      setSummary(response.data.summary);
+      setTotal(response.data.count);
+    } catch (cause) {
+      if (sequence === requestSequence.current) setError(cause instanceof Error ? cause.message : "Unable to load users.");
+    } finally {
+      if (sequence === requestSequence.current) setLoading(false);
+    }
+  }, [page, search, plan, activeFilter]);
 
-  // Operational Modal Selected Trackers
-  const [userForDeletion, setUserForDeletion] = useState<{
-    id: string;
-    name: string;
-    email: string;
-  } | null>(null);
-  const [userForViewing, setUserForViewing] =
-    useState<UserManagementRow | null>(null);
+  useEffect(() => { const timer = window.setTimeout(loadUsers, search ? 350 : 0); return () => window.clearTimeout(timer); }, [loadUsers, search]);
 
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-
-  // Context Provider Global Open Overlays
-  const {
-    isExportModalOpen,
-    setIsExportModalOpen,
-    isViewModalOpen,
-    setIsViewModalOpen,
-  } = useDashboard();
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const entriesPerPage = 10;
-
-  // 1. Live Counters Analytics Computation
-  const counters = useMemo(() => {
-    return {
-      total: data.length,
-      active: data.filter((u) => u.status === "Active").length,
-      blocked: data.filter((u) => u.status === "Blocked").length,
-      trial: data.filter((u) => u.status === "Trial").length,
-    };
-  }, [data]);
-
-  const filteredData = useMemo(() => {
-    return data.filter((user) => {
-      const matchesSearch =
-        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.phone.includes(searchQuery);
-
-      const matchesPlan =
-        selectedPlan === "All Plans" || user.plan === selectedPlan;
-      const matchesStatus =
-        selectedStatus === "All Status" || user.status === selectedStatus;
-
-      return matchesSearch && matchesPlan && matchesStatus;
-    });
-  }, [data, searchQuery, selectedPlan, selectedStatus]);
-
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * entriesPerPage;
-    return filteredData.slice(startIndex, startIndex + entriesPerPage);
-  }, [filteredData, currentPage]);
-
-  const totalPages = Math.ceil(filteredData.length / entriesPerPage) || 1;
-
-  // Handles updates passing through the active switches inside the table rows
-  const handleStatusToggle = (
-    targetRow: UserManagementRow,
-    checked: boolean,
-  ) => {
-    setData((prev) =>
-      prev.map((user) =>
-        user.id === targetRow.id
-          ? {
-              ...user,
-              isActive: checked,
-              status: checked ? "Active" : "Blocked",
-            }
-          : user,
-      ),
-    );
+  const viewUser = async (row: UserRow) => {
+    setSelectedUser(null); setDetailLoading(true); setIsViewModalOpen(true);
+    try { const response = await apiRequest<ApiEnvelope<AdminUserDetail>>(`admin/users/${row.id}/`); setSelectedUser(response.data); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load user details."); setIsViewModalOpen(false); }
+    finally { setDetailLoading(false); }
   };
 
-  // Securely processes explicit deletions received from the validation modal
-  const handleRowDeleteConfirm = (userId: string) => {
-    setData((prev) => prev.filter((user) => user.id !== userId));
-    setIsDeleteModalOpen(false);
-    setUserForDeletion(null);
+  const toggleStatus = async (row: UserRow, checked: boolean) => {
+    setRows((current) => current.map((item) => item.id === row.id ? { ...item, isActive: checked, is_active: checked, display_status: checked ? (item.plan === "trial" ? "Trial" : "Active") : "Blocked" } : item));
+    try { await apiRequest(`admin/users/${row.id}/`, { method: "PATCH", body: JSON.stringify({ is_active: checked }) }); await loadUsers(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to update the user."); await loadUsers(); }
   };
 
-  // Safe fallback utility if standalone custom components use download context hooks
-  const handleCsvExportFallback = () => {
-    const headers = [
-      "S.ID,User Name,Company,Email,Phone,Plan,Messages,Leads,Status,Joined\n",
-    ];
-    const rows = filteredData.map(
-      (u) =>
-        `"${u.sid}","${u.name}","${u.company}","${u.email}","${u.phone}","${u.plan}","${u.messages}",${u.leads},"${u.status}","${u.joined}"`,
-    );
-
-    const blob = new Blob([headers.concat(rows.join("\n")).join("")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `User_Export_${new Date().toISOString().slice(0, 10)}.csv`,
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setIsExportModalOpen(false);
+  const deleteUser = async (id: string) => {
+    try { await apiRequest(`admin/users/${id}/`, { method: "DELETE" }); setDeleteOpen(false); setDeleteTarget(null); if (rows.length === 1 && page > 1) setPage((value) => value - 1); else await loadUsers(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to delete the user."); }
   };
 
-  const handleRowView = (targetRow: UserManagementRow) => {
-    setUserForViewing(targetRow);
-    setIsViewModalOpen(true);
+  const exportUsers = async ({ fileFormat, delimiter, columns, dateRange }: { fileFormat: string; delimiter: string; columns: string[]; dateRange: string }) => {
+    const params = new URLSearchParams({ format: fileFormat, delimiter, columns: columns.join(","), date_range: dateRange });
+    if (search.trim()) params.set("search", search.trim()); if (plan) params.set("plan", plan); if (activeFilter) params.set("is_active", activeFilter);
+    const response = await fetch(`/api/backend/admin/users/export/?${params}`);
+    if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.detail || "Unable to export users."); }
+    const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = fileFormat === "xlsx" ? "chesera-users.xlsx" : "chesera-users.csv"; anchor.click(); URL.revokeObjectURL(url); setIsExportModalOpen(false);
   };
 
-  const columns: ColumnDef<UserManagementRow>[] = [
-    {
-      header: "S.ID",
-      accessorKey: "sid",
-      cell: (row) => (
-        <span className="text-slate-400 font-normal">{row.sid}</span>
-      ),
-    },
-    {
-      header: "User",
-      accessorKey: "custom_user",
-      cell: (row) => (
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#004BCE] text-[11px] font-bold text-white">
-            AJ
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-[#0F172A] text-[13px] leading-snug">
-              {row.name}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">
-              {row.company}
-            </span>
-          </div>
-        </div>
-      ),
-    },
-    { header: "Email", accessorKey: "email" },
+  const columns: ColumnDef<UserRow>[] = [
+    { header: "ID", accessorKey: "user_id", cell: (row) => <span className="text-slate-400">USR-{String(row.user_id).padStart(4, "0")}</span> },
+    { header: "User", accessorKey: "custom_user", cell: (row) => <div className="flex items-center gap-3">{row.profile_pic ? <img src={row.profile_pic} alt="" className="h-8 w-8 rounded-full object-cover" /> : <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white">{initials(row.user_name)}</div>}<div><p className="font-semibold text-slate-900">{row.user_name || "Unnamed user"}</p><p className="text-xs text-slate-400">{row.business_name || "No business"}</p></div></div> },
+    { header: "Email", accessorKey: "email", cell: (row) => row.email || "—" },
     { header: "Phone", accessorKey: "phone" },
-    {
-      header: "Plan",
-      accessorKey: "plan",
-      cell: (row) => (
-        <span className="inline-flex items-center rounded-md bg-[#EFF6FF] px-2.5 py-0.5 text-xs font-semibold text-[#2563EB]">
-          {row.plan}
-        </span>
-      ),
-    },
-    { header: "Messages", accessorKey: "messages" },
-    { header: "Leads", accessorKey: "leads" },
-    {
-      header: "Status",
-      accessorKey: "status",
-      cell: (row) => {
-        const style = {
-          Active: "bg-[#E6F4EA] text-[#137333]",
-          Blocked: "bg-[#FCE8E6] text-[#C5221F]",
-          Trial: "bg-[#FEF7E0] text-[#B06000]",
-        }[row.status];
-        return (
-          <span
-            className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-bold ${style}`}
-          >
-            {row.status}
-          </span>
-        );
-      },
-    },
-    { header: "Joined", accessorKey: "joined" },
-    { header: "Action", accessorKey: "action" },
+    { header: "Plan", accessorKey: "plan", cell: (row) => <Badge tone={row.plan === "pro" ? "blue" : row.plan === "trial" ? "gold" : "gray"}>{title(row.plan)}</Badge> },
+    { header: "Messages", accessorKey: "messages_sent_count", cell: (row) => formatNumber(row.messages_sent_count) },
+    { header: "Leads", accessorKey: "leads_count", cell: (row) => formatNumber(row.leads_count) },
+    { header: "Status", accessorKey: "display_status", cell: (row) => <Badge tone={row.display_status === "Active" ? "green" : row.display_status === "Trial" ? "gold" : "red"}>{row.display_status}</Badge> },
+    { header: "Joined", accessorKey: "joined_date", cell: (row) => formatDate(row.joined_date) },
+    { header: "Action", accessorKey: "action", align: "right" },
   ];
 
-  return (
-    <div className="space-y-5">
-      {/* Top Filter and Search Action Layout Block */}
-      <div className="flex flex-col md:flex-row gap-3 items-center justify-between w-full">
-        <div className="relative w-full md:max-w-md">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by name, email or phone"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-100 bg-white"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
-          <div className="relative">
-            <select
-              value={selectedPlan}
-              onChange={(e) => {
-                setSelectedPlan(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 py-2.5 text-sm font-medium text-[#64748B] focus:outline-none focus:ring-2 focus:ring-slate-100 cursor-pointer"
-            >
-              <option>All Plans</option>
-              <option>Pro</option>
-              <option>Enterprise</option>
-              <option>Free</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-          </div>
-
-          <div className="relative">
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="appearance-none rounded-xl border border-slate-200 bg-white pl-4 pr-10 py-2.5 text-sm font-medium text-[#64748B] focus:outline-none focus:ring-2 focus:ring-slate-100 cursor-pointer"
-            >
-              <option>All Status</option>
-              <option>Active</option>
-              <option>Blocked</option>
-              <option>Trial</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-          </div>
-
-          <button
-            onClick={() => setIsExportModalOpen(true)}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-[#004BCE] hover:bg-slate-50 transition-colors focus:outline-none"
-          >
-            <Download className="h-4 w-4" />
-            <span>Export CSV</span>
-          </button>
-
-          <ExportCsvModal
-            isOpen={isExportModalOpen}
-            onClose={() => setIsExportModalOpen(false)}
-            onConfirm={handleCsvExportFallback}
-            dataToExport={filteredData}
-          />
-        </div>
-      </div>
-
-      {/* Counter Analytics Status Pill Panel */}
-      <div className="w-full rounded-2xl border border-slate-100 bg-white px-6 py-3.5 flex flex-wrap items-center gap-3 shadow-[0_2px_8px_rgba(0,0,0,0.01)]">
-        <span className="rounded-full bg-[#EEF2FF] px-3 py-1 text-xs font-bold text-[#4F46E5]">
-          Total: {counters.total}
-        </span>
-        <span className="rounded-full bg-[#E6F4EA] px-3 py-1 text-xs font-bold text-[#137333]">
-          Active: {counters.active}
-        </span>
-        <span className="rounded-full bg-[#FCE8E6] px-3 py-1 text-xs font-bold text-[#C5221F]">
-          Blocked: {counters.blocked}
-        </span>
-        <span className="rounded-full bg-[#FEF7E0] px-3 py-1 text-xs font-bold text-[#B06000]">
-          Trial: {counters.trial}
-        </span>
-      </div>
-
-      {/* Main Table Grid Card Frame with Pagination Footer and Overlays */}
-      <div className="border border-slate-100 rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-        <DataTable
-          title="Recent Users"
-          columns={columns}
-          data={paginatedData}
-          onStatusToggle={handleStatusToggle}
-          onRowDelete={(user) => {
-            setUserForDeletion({
-              id: user.id,
-              name: user.name,
-              email: user.email,
-            });
-            setIsDeleteModalOpen(true);
-          }}
-          onRowView={handleRowView}
-        />
-
-        <CustomPagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalEntries={filteredData.length}
-          entriesPerPage={entriesPerPage}
-          onPageChange={setCurrentPage}
-        />
-
-        {/* User Statistics Overview Modal Wrapper */}
-        <UserDetailsModal
-          isOpen={isViewModalOpen}
-          userData={userForViewing}
-          onClose={() => {
-            setIsViewModalOpen(false);
-            setUserForViewing(null);
-          }}
-        />
-
-        {/* Secure User Deletion Challenge Modal Wrapper */}
-        <DeleteUserModal
-          isOpen={isDeleteModalOpen}
-          userToConfirm={userForDeletion}
-          onConfirmDelete={handleRowDeleteConfirm}
-          onClose={() => {
-            setIsDeleteModalOpen(false);
-            setUserForDeletion(null);
-          }}
-        />
-      </div>
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  return <div className="space-y-5">
+    <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
+      <div className="relative w-full md:max-w-md"><Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search name, email, phone or business" className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-sm outline-none focus:ring-2 focus:ring-blue-100" /></div>
+      <div className="flex w-full flex-wrap justify-end gap-2 md:w-auto"><Select value={plan} onChange={(value) => { setPlan(value); setPage(1); }} options={[["", "All plans"], ["pro", "Pro"], ["trial", "Trial"], ["free", "Free"]]} /><Select value={activeFilter} onChange={(value) => { setActiveFilter(value); setPage(1); }} options={[["", "All statuses"], ["true", "Active"], ["false", "Blocked"]]} /><button onClick={() => setIsExportModalOpen(true)} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700"><Download className="h-4 w-4" />Export</button></div>
     </div>
-  );
+    {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+    <div className="flex flex-wrap gap-3 rounded-2xl border border-slate-100 bg-white px-6 py-3.5"><Counter tone="blue" label="Total" value={summary.total_users} /><Counter tone="green" label="Active" value={summary.total_active} /><Counter tone="red" label="Blocked" value={summary.total_blocked} /><Counter tone="gold" label="Trial" value={summary.total_on_trial} /></div>
+    <div className="rounded-2xl border border-slate-100 bg-white">{loading ? <div className="p-12 text-center text-sm text-slate-500">Loading users…</div> : <DataTable title="Users" columns={columns} data={rows} onStatusToggle={toggleStatus} onRowView={viewUser} onRowDelete={(row) => { setDeleteTarget({ id: String(row.id), name: row.user_name, email: row.email || "" }); setDeleteOpen(true); }} />}<CustomPagination currentPage={page} totalPages={totalPages} totalEntries={total} entriesPerPage={PAGE_SIZE} onPageChange={setPage} /></div>
+    <ExportCsvModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} onConfirm={exportUsers} totalRecords={total} />
+    <UserDetailsModal isOpen={isViewModalOpen} userData={selectedUser} isLoading={detailLoading} onClose={() => { setIsViewModalOpen(false); setSelectedUser(null); }} />
+    <DeleteUserModal isOpen={deleteOpen} userToConfirm={deleteTarget} onConfirmDelete={deleteUser} onClose={() => { setDeleteOpen(false); setDeleteTarget(null); }} />
+  </div>;
 }
+
+function initials(name: string) { return (name || "U").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
+function title(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function Badge({ children, tone }: { children: React.ReactNode; tone: "blue" | "green" | "red" | "gold" | "gray" }) { const styles = { blue: "bg-blue-50 text-blue-700", green: "bg-green-50 text-green-700", red: "bg-red-50 text-red-700", gold: "bg-amber-50 text-amber-700", gray: "bg-slate-100 text-slate-600" }; return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${styles[tone]}`}>{children}</span>; }
+function Counter({ label, value, tone }: { label: string; value: number; tone: "blue" | "green" | "red" | "gold" }) { const styles = { blue: "bg-indigo-50 text-indigo-700", green: "bg-green-50 text-green-700", red: "bg-red-50 text-red-700", gold: "bg-amber-50 text-amber-700" }; return <span className={`rounded-full px-3 py-1 text-xs font-bold ${styles[tone]}`}>{label}: {formatNumber(value)}</span>; }
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) { return <div className="relative"><select value={value} onChange={(event) => onChange(event.target.value)} className="appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm text-slate-600 outline-none">{options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /></div>; }

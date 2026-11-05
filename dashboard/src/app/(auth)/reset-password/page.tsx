@@ -4,9 +4,12 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Lock, Eye, EyeOff, Check } from 'lucide-react';
+import { useAuth } from '@/providers/AuthProvider';
+import { apiRequest } from '@/lib/api';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const { resetToken, setResetToken, setResetEmail } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -56,19 +59,20 @@ export default function ResetPasswordPage() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      // Update password (in demo, we just simulate this)
-      localStorage.setItem('user_password', password);
+    if (!resetToken) { setError('Your password reset session is missing or expired. Please request a new code.'); setIsLoading(false); return; }
+    try {
+      await apiRequest('admin/auth/password-reset/confirm/', { method: 'POST', body: JSON.stringify({ reset_token: resetToken, new_password: password, confirm_new_password: confirmPassword }) });
       setIsSubmitted(true);
-
-      // Redirect to login after 3 seconds
+      setResetToken(null);
+      setResetEmail(null);
       setTimeout(() => {
         router.push('/login');
-      }, 3000);
-
+      }, 2000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to reset password.');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const strengthColors = {
