@@ -22,7 +22,7 @@ class UserQuerySet(models.QuerySet):
 
 class OTPVerificationQuerySet(models.QuerySet):
     def active(self):
-        return self.filter(is_deleted=False, is_used=False, expires_at__gt=timezone.now())
+        return self.filter(status="ACTIVE", is_used=False, expires_at__gt=timezone.now())
 
     def expired(self):
         return self.filter(expires_at__lte=timezone.now())
@@ -35,6 +35,9 @@ class OTPVerificationQuerySet(models.QuerySet):
 
     def for_phone(self, phone_number):
         return self.filter(phone_number=phone_number)
+
+    def for_email(self, email):
+        return self.filter(email__iexact=email)
 
     def for_user(self, user):
         return self.filter(user=user)

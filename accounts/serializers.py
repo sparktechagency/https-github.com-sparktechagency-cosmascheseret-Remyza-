@@ -1,6 +1,5 @@
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
@@ -8,6 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, OTPVerification
 from .choices import UserType
 from business.serializers import OrganizationSerializer
+from common.choices import Status
 
 
 class ClientSignupSerializer(serializers.Serializer):
@@ -57,49 +57,62 @@ class ClientSignupSerializer(serializers.Serializer):
 
 
 class ClientSendOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(max_length=30)
+    email = serializers.EmailField()
 
-    def validate_phone_number(self, value):
-        return value.strip()
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def validate(self, attrs):
+        users = User.objects.filter(
+            email__iexact=attrs["email"],
+            is_phone_verified=True,
+            user_type=UserType.CLIENT,
+            status=Status.ACTIVE,
+        )
+        if users.count() != 1:
+            raise serializers.ValidationError(
+                {"email": "No active, phone-verified Chesera account was found for this email."}
+            )
+        attrs["user"] = users.first()
+        return attrs
 
 
 class ClientVerifyOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(max_length=30)
+    phone_number = serializers.CharField(max_length=30, required=False)
+    email = serializers.EmailField(required=False)
     otp = serializers.CharField(max_length=10)
 
     def validate(self, attrs):
-        phone = attrs["phone_number"]
+        phone = (attrs.get("phone_number") or "").strip()
+        email = (attrs.get("email") or "").strip().lower()
+        if bool(phone) == bool(email):
+            raise serializers.ValidationError("Provide exactly one of phone_number or email.")
+
         otp = attrs["otp"]
-        otp_obj = (
-            OTPVerification.objects
-            .filter(phone_number=phone, is_used=False,)
-            .order_by("-created_at")
-            .first()
-        )
+        if phone:
+            purpose = "REGISTER"
+            otp_obj = OTPVerification.objects.latest_active(phone, purpose)
+        else:
+            purpose = "LOGIN"
+            otp_obj = OTPVerification.objects.latest_active_for_email(email, purpose)
+
         if not otp_obj:
             raise serializers.ValidationError("OTP not found.")
         success, message = otp_obj.verify(otp)
         if not success:
             raise serializers.ValidationError(message)
         attrs["otp_obj"] = otp_obj
+        attrs["login_mode"] = "registration" if phone else "email"
         return attrs
 
     def create(self, validated_data):
-        phone = validated_data["phone_number"]
-        user, created = User.objects.get_or_create(
-            phone_number=phone,
-            defaults={
-                "user_type": UserType.CLIENT,
-                "is_phone_verified": True,
-            },
-        )
+        otp_obj = validated_data["otp_obj"]
+        user = otp_obj.user
 
         update_fields = []
-        if not user.is_phone_verified:
+        if validated_data["login_mode"] == "registration" and not user.is_phone_verified:
             user.is_phone_verified = True
             update_fields.append("is_phone_verified")
-        if created:
-            update_fields = []
         if update_fields:
             user.save(update_fields=update_fields)
 
@@ -112,18 +125,19 @@ class ClientVerifyOTPSerializer(serializers.Serializer):
 
 
 class AdminLoginSerializer(serializers.Serializer):
-    phone_number = serializers.CharField(max_length=30)
+    email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        phone_number = attrs["phone_number"].strip()
+        email = attrs["email"].strip().lower()
         password = attrs["password"]
-        user = authenticate(username=phone_number, password=password,)
-        if user is None:
+        users = User.objects.filter(email__iexact=email, is_staff=True, status=Status.ACTIVE)
+        if users.count() != 1:
             raise serializers.ValidationError("Invalid credentials.")
 
-        if not user.is_staff:
-            raise serializers.ValidationError("Permission denied.")
+        user = users.first()
+        if not user.check_password(password):
+            raise serializers.ValidationError("Invalid credentials.")
 
         refresh = RefreshToken.for_user(user)
         attrs["user"] = user
@@ -196,8 +210,8 @@ class ClientSignupResponseSerializer(serializers.Serializer):
 
 
 class ClientSendOTPDataSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
-    is_new_user = serializers.BooleanField()
+    email = serializers.EmailField()
+    delivery_channel = serializers.CharField()
 
 
 class ClientSendOTPResponseSerializer(serializers.Serializer):

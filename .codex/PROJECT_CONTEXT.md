@@ -456,3 +456,22 @@ Updated on 2026-10-27:
 - Static files remain separate and are served through WhiteNoise using the `staticfiles` storage backend.
 - Public profile-media URLs use `AWS_S3_CUSTOM_DOMAIN` and do not use signed query strings. Therefore S3 must permit anonymous `s3:GetObject` for the intended public media prefix.
 - Files uploaded before the Django 6 storage correction may exist only in the container/local media directory, despite their serialized URL appearing to be an S3 URL. Re-upload or migrate those files after deployment.
+
+## CURRENT AUTHENTICATION CONTRACT
+
+Updated on 2026-11-05:
+
+- Client registration requires full profile details and sends one registration OTP to the submitted phone number through a Chesera-owned Sent.dm system Sender Profile.
+- Phone SMS OTP is used only to verify the mobile number during registration.
+- After phone verification, client login uses the registered email address:
+  - `POST /api/v1/client/auth/send-otp/` accepts `email` and sends the OTP through configured SMTP/SES.
+  - `POST /api/v1/client/auth/verify-otp/` accepts `email + otp` for login.
+- Registration verification continues through the same verify endpoint with `phone_number + otp`; the endpoint strictly maps phone to `REGISTER` and email to `LOGIN` so OTP purposes cannot be crossed.
+- Login OTP requests never create users. Only an existing active client with a verified phone can request an email login OTP.
+- Admin login is now `email + password` at `POST /api/v1/admin/auth/login/`; the account must be active and staff-enabled.
+- Authentication endpoints have scoped throttles for signup, login OTP requests, OTP verification, and admin login.
+- Sent.dm registration OTP sends use a pre-approved template and require:
+  - `SENTDM_SYSTEM_PROFILE_ID`
+  - `SENTDM_OTP_TEMPLATE_ID` (preferred) or `SENTDM_OTP_TEMPLATE_NAME`
+- The admin Next.js dashboard now performs real admin login through a server-side route. Access and refresh JWTs are stored in HTTP-only cookies, not localStorage.
+- The dashboard's old demo login is disabled. Its simulated forgot-password flow is no longer linked from the login page and must not be enabled until a real reset API is implemented.

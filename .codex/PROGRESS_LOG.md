@@ -907,3 +907,24 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py test sentdm.tests`
   - `.venv\Scripts\python.exe manage.py check`
 - Note: `.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` still reports unrelated pre-existing CRM migration drift only.
+
+## 2026-11-05 - Phone-Once Registration and Email Login Authentication
+
+- Changed the client authentication contract to reduce recurring SMS cost:
+  - signup sends a phone OTP through Sent.dm
+  - subsequent login OTPs are delivered to the verified account email through SMTP/SES
+- Added email-aware OTP persistence and strict OTP purpose matching.
+- Prevented login OTP requests from creating new users or authenticating unverified/blocked accounts.
+- Added Sent.dm template-message support for the Chesera system OTP Sender Profile.
+- Added production settings for the system Sender Profile and approved OTP template.
+- Changed admin login from phone/password to email/password.
+- Added scoped authentication throttles.
+- Replaced the dashboard's fake demo login with a server-side Next.js authentication bridge and HTTP-only JWT cookies.
+- Removed the fake forgot-password link from the dashboard login screen; a real recovery API remains future work.
+- Added migration `accounts/0007_otpverification_email.py`.
+- Verification passed:
+  - `.venv\Scripts\python.exe -m compileall -q accounts sentdm cheshara_config`
+  - `.venv\Scripts\python.exe manage.py check`
+  - `.venv\Scripts\python.exe manage.py makemigrations accounts --check --dry-run`
+  - 17 focused accounts/Sent.dm authentication tests
+- Dashboard dependency installation did not complete in the local environment, so Next.js lint/build verification remains pending.

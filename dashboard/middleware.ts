@@ -6,7 +6,7 @@ export function middleware(request: NextRequest) {
 
   // Check if trying to access dashboard without authentication
   if (pathname.startsWith('/dashboard')) {
-    const token = request.cookies.get('auth_token')?.value;
+    const token = request.cookies.get('chesera_admin_access')?.value;
     
     if (!token) {
       // Check localStorage equivalent - we'll check if auth token exists
@@ -18,7 +18,7 @@ export function middleware(request: NextRequest) {
   // Redirect authenticated users away from login/auth pages
   if (pathname.startsWith('/login') || pathname.startsWith('/forgot-password') || 
       pathname.startsWith('/verify-otp') || pathname.startsWith('/reset-password')) {
-    const token = request.cookies.get('auth_token')?.value;
+    const token = request.cookies.get('chesera_admin_access')?.value;
     
     if (token) {
       return NextResponse.redirect(new URL('/dashboard', request.url));

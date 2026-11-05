@@ -137,3 +137,41 @@ class SentDMClient:
             idempotency_key=idempotency_key or f"chesera-message-{uuid.uuid4()}",
         )
 
+    def send_template_message(
+        self,
+        *,
+        to,
+        template_id=None,
+        template_name=None,
+        parameters=None,
+        profile_id=None,
+        channels=None,
+        idempotency_key=None,
+    ):
+        """Send a Sent.dm template message using the documented v3 payload."""
+        if bool(template_id) == bool(template_name):
+            raise ValueError("Provide exactly one of template_id or template_name.")
+
+        template = {
+            "parameters": parameters or {},
+        }
+        if template_id:
+            template["id"] = template_id
+        else:
+            template["name"] = template_name
+
+        payload = {
+            "to": [to],
+            "template": template,
+        }
+        if channels:
+            payload["channel"] = list(channels)
+
+        return self._request(
+            "POST",
+            "/messages",
+            profile_id=profile_id,
+            json=self.with_sandbox(payload),
+            idempotency_key=idempotency_key or f"chesera-template-message-{uuid.uuid4()}",
+        )
+

@@ -289,6 +289,9 @@ SENTDM_API_BASE = os.getenv("SENTDM_API_BASE", "https://api.sent.dm/v3")
 SENTDM_API_KEY = os.getenv("SENTDM_API_KEY", "")
 SENTDM_ORGANIZATION_ID = os.getenv("SENTDM_ORGANIZATION_ID", "")
 SENTDM_SANDBOX_MODE = os.getenv("SENTDM_SANDBOX_MODE", "True").strip().lower() in ("true", "1", "yes")
+SENTDM_SYSTEM_PROFILE_ID = os.getenv("SENTDM_SYSTEM_PROFILE_ID", "")
+SENTDM_OTP_TEMPLATE_ID = os.getenv("SENTDM_OTP_TEMPLATE_ID", "")
+SENTDM_OTP_TEMPLATE_NAME = os.getenv("SENTDM_OTP_TEMPLATE_NAME", "")
 SENTDM_WEBHOOK_SECRET = os.getenv("SENTDM_WEBHOOK_SECRET", "")
 SENTDM_WEBHOOK_TOLERANCE_SECONDS = int(os.getenv("SENTDM_WEBHOOK_TOLERANCE_SECONDS", "300"))
 # Celery / background workers
@@ -307,6 +310,13 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 SENTDM_WEBHOOK_ASYNC_ENABLED = os.getenv("SENTDM_WEBHOOK_ASYNC_ENABLED", "True").strip().lower() in ("true", "1", "yes")
+
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+    "client_signup": os.getenv("CLIENT_SIGNUP_THROTTLE_RATE", "5/hour"),
+    "client_login_otp": os.getenv("CLIENT_LOGIN_OTP_THROTTLE_RATE", "5/hour"),
+    "client_verify_otp": os.getenv("CLIENT_VERIFY_OTP_THROTTLE_RATE", "10/hour"),
+    "admin_login": os.getenv("ADMIN_LOGIN_THROTTLE_RATE", "10/hour"),
+}
 
 # Channels / WebSocket notifications
 CHANNEL_LAYERS = {

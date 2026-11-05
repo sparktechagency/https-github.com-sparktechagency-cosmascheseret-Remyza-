@@ -77,7 +77,8 @@ class Device(BaseModel):
 
 class OTPVerification(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otp_verifications")
-    phone_number = models.CharField(max_length=30)
+    phone_number = models.CharField(max_length=30, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
     otp_hash = models.CharField(max_length=255)
     otp_code = models.CharField(max_length=10, blank=True, null=True)
     purpose = models.CharField(max_length=30, choices=OTPPurpose.choices)
@@ -95,6 +96,7 @@ class OTPVerification(BaseModel):
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["phone_number"]),
+            models.Index(fields=["email"]),
             models.Index(fields=["purpose"]),
             models.Index(fields=["expires_at"]),
         ]

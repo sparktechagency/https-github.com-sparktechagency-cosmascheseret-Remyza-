@@ -84,6 +84,38 @@ class SentDMClientSandboxTests(SimpleTestCase):
         client.send_message(to="+15551234567", text="Hello", channel="auto")
 
         self.assertEqual(mocked_request.call_args.kwargs["json"], {"to": ["+15551234567"], "text": "Hello"})
+
+    @patch("sentdm.client.requests.request")
+    @override_settings(SENTDM_SANDBOX_MODE=True)
+    def test_send_template_message_uses_profile_template_and_sandbox(self, mocked_request):
+        mocked_request.return_value.status_code = 202
+        mocked_request.return_value.headers = {}
+        mocked_request.return_value.json.return_value = {"status": "QUEUED"}
+        client = SentDMClient(api_key="test-key", base_url="https://api.sent.dm/v3")
+
+        client.send_template_message(
+            to="+15551234567",
+            template_name="Chesera Verification Code",
+            parameters={"code": "123456"},
+            profile_id="profile_test",
+            channels=["sms"],
+            idempotency_key="otp-1",
+        )
+
+        kwargs = mocked_request.call_args.kwargs
+        self.assertEqual(
+            kwargs["json"],
+            {
+                "to": ["+15551234567"],
+                "template": {
+                    "name": "Chesera Verification Code",
+                    "parameters": {"code": "123456"},
+                },
+                "channel": ["sms"],
+                "sandbox": True,
+            },
+        )
+        self.assertEqual(kwargs["headers"]["x-profile-id"], "profile_test")
     def test_build_profile_payload_uses_request_overrides(self):
         class User:
             id = 7

@@ -43,7 +43,7 @@ export default function DashboardSidebar() {
   const handleLogout = async () => {
     try {
       // Call the logout function from auth context
-      logout();
+      await logout();
 
       // Close sidebar on mobile
       setSidebarOpen(false);

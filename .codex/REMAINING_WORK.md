@@ -147,7 +147,8 @@ Messaging activation is in progress. Number assignment may take additional time 
 
 ## 11. FRONTEND / MOBILE INTEGRATION
 
-- [ ] Wire signup endpoint `POST /api/v1/client/auth/signup/` before OTP verification for new users.
+- [~] Wire signup endpoint `POST /api/v1/client/auth/signup/` before OTP verification for new users. Backend phone-OTP flow is complete; mobile UI integration remains.
+- [~] Wire email OTP login using `POST /api/v1/client/auth/send-otp/` and `POST /api/v1/client/auth/verify-otp/`. Backend is complete; mobile UI integration remains.
 - [ ] Wire IAP subscription creation/listing endpoints.
 - [ ] Wire business compliance form fields.
 - [ ] Wire optional WhatsApp connection endpoint and fields:
@@ -182,6 +183,8 @@ sudo certbot renew --dry-run
 - [ ] Confirm RDS backups/snapshots are enabled.
 - [ ] Confirm server logs are accessible.
 - [ ] Confirm error monitoring/log retention plan.
+- [!] Configure and validate `SENTDM_SYSTEM_PROFILE_ID` plus the approved OTP template ID/name after the Chesera system Sender Profile is approved.
+- [ ] Configure/validate production SES SMTP credentials and `DEFAULT_FROM_EMAIL` for client login OTP delivery.
 - [x] Fix unrelated CRM migration drift:
 
 ```text
@@ -300,3 +303,14 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [ ] Production: ensure a Celery beat process is running so the every-minute follow-up task executes.
 - [ ] Production: run migrations for `crm.AutomatedFollowUp` and new notification type choices.
 - [ ] Frontend/mobile: display follow-up notifications in the existing notification UI.
+
+## 21. ADMIN DASHBOARD INTEGRATION
+
+- [x] Replace demo admin login with the real email/password backend API.
+- [x] Keep admin JWTs in server-managed HTTP-only cookies instead of browser localStorage.
+- [x] Hide the unsupported simulated forgot-password flow from the login page.
+- [ ] Implement a real admin password-recovery API and re-enable the forgot-password UI only if approved.
+- [ ] Complete dashboard API integration for users, subscriptions, revenue, analytics, messages, notifications, settings, FAQs, and legal pages.
+- [ ] Add missing server-side filtering/search parameters identified during dashboard integration.
+- [ ] Run dashboard lint and production build after npm dependencies install successfully.
+- [ ] Add dashboard Docker image/service, CI/CD build/push, Nginx host, and SSL for `admin.trychesera.com`.

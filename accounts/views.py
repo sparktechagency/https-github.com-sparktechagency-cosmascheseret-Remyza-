@@ -12,6 +12,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import status
 from rest_framework import response
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
@@ -55,11 +56,20 @@ from .serializers import (
 from common.choices import Status
 from django.db import transaction
 from notifications.services import NotificationTemplates, safe_notify
+from .services import send_login_otp_email, send_registration_otp_sms
+
+
+def mask_email(email):
+    local, domain = email.split("@", 1)
+    visible = local[:2] if len(local) > 2 else local[:1]
+    return f"{visible}{'*' * max(3, len(local) - len(visible))}@{domain}"
 
 
 
 class ClientSignupAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "client_signup"
 
     @transaction.atomic
     def post(self, request):
@@ -77,10 +87,15 @@ class ClientSignupAPIView(APIView):
             setattr(user, field, serializer.validated_data.get(field, ""))
         user.user_type = UserType.CLIENT
         user.save(update_fields=["full_name", "email", "city", "country", "country_code", "user_type", "updated_at"])
-        OTPVerification.objects.create_otp(
+        otp_obj, otp = OTPVerification.objects.create_otp(
             user=user,
             phone_number=phone,
             purpose=OTPPurpose.REGISTER,
+        )
+        send_registration_otp_sms(
+            phone_number=phone,
+            otp=otp,
+            otp_id=otp_obj.id,
         )
 
         if created:
@@ -102,27 +117,33 @@ class ClientSignupAPIView(APIView):
 
 class ClientSendOTPAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "client_login_otp"
 
     def post(self, request):
         serializer = ClientSendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        phone = serializer.validated_data["phone_number"].strip()
-        user, created = User.objects.get_or_create(phone_number=phone)
-        OTPVerification.objects.create_otp(
+        email = serializer.validated_data["email"]
+        user = serializer.validated_data["user"]
+        otp_obj, otp = OTPVerification.objects.create_otp(
             user=user,
-            phone_number=phone,
+            email=email,
             purpose=OTPPurpose.LOGIN,
         )
 
-        # TODO: Send OTP via Twilio
+        try:
+            send_login_otp_email(email=email, otp=otp)
+        except Exception:
+            otp_obj.delete()
+            raise
 
         return Response(
             {
                 "success": True,
-                "message": "OTP sent successfully.",
+                "message": "Login OTP sent to your registered email address.",
                 "data": {
-                    "phone_number": user.phone_number,
-                    "is_new_user": created
+                    "email": mask_email(email),
+                    "delivery_channel": "email",
                 }
             },
             status=status.HTTP_200_OK,
@@ -130,6 +151,8 @@ class ClientSendOTPAPIView(APIView):
 
 class ClientVerifyOTPAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "client_verify_otp"
 
     def post(self, request):
         serializer = ClientVerifyOTPSerializer(data=request.data)
@@ -138,7 +161,7 @@ class ClientVerifyOTPAPIView(APIView):
         return Response(
             {
                 "success": True,
-                "message": "Login successful.",
+                "message": "Phone verified successfully." if serializer.validated_data["login_mode"] == "registration" else "Login successful.",
                 "data": {
                     "access": result["access"],
                     "refresh": result["refresh"],
@@ -161,6 +184,8 @@ class ClientVerifyOTPAPIView(APIView):
 
 class AdminLoginAPIView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "admin_login"
 
     def post(self, request):
         serializer = AdminLoginSerializer(data=request.data)
@@ -1248,12 +1273,13 @@ ClientSignupAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],
         summary="Signup and send OTP",
-        description="Creates or updates an unverified client user with full name, email, phone number, city, country, and optional country code, then sends a registration OTP. JWT tokens are returned after OTP verification.",
+        description="Creates or updates an unverified client user, then sends a one-time registration OTP to the phone number through the configured Chesera Sent.dm system Sender Profile. Phone SMS is used only for registration verification.",
         request=ClientSignupSerializer,
         responses={
             201: ClientSignupResponseSerializer,
             200: ClientSignupResponseSerializer,
             400: OpenApiResponse(description="Invalid signup payload or verified user already exists."),
+            503: OpenApiResponse(description="Sent.dm system profile/template is unavailable or OTP delivery failed."),
         },
     ),
 )(ClientSignupAPIView)
@@ -1261,11 +1287,12 @@ ClientSendOTPAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],
         summary="Send login OTP",
-        description="Creates or finds a client user by phone number and starts an OTP login session.",
+        description="Sends a login OTP to the registered email address of an existing, active, phone-verified client. This endpoint never creates a user and does not send a login SMS.",
         request=ClientSendOTPSerializer,
         responses={
             200: ClientSendOTPResponseSerializer,
-            400: OpenApiResponse(description="Invalid phone number or request payload."),
+            400: OpenApiResponse(description="No active, phone-verified client exists for the supplied email."),
+            503: OpenApiResponse(description="Email OTP delivery failed."),
         },
     ),
 )(ClientSendOTPAPIView)
@@ -1274,7 +1301,7 @@ ClientVerifyOTPAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],
         summary="Verify login OTP",
-        description="Verifies the latest unused OTP for the phone number and returns JWT access and refresh tokens.",
+        description="Verifies a registration OTP with phone_number or a login OTP with email. Exactly one identifier is required. Registration verification marks the phone as verified; email verification signs in an existing verified client.",
         request=ClientVerifyOTPSerializer,
         responses={
             200: ClientVerifyOTPResponseSerializer,
@@ -1287,7 +1314,7 @@ AdminLoginAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - Admin"],
         summary="Admin login",
-        description="Authenticates a staff/admin user with phone number and password. Returns JWT access and refresh tokens.",
+        description="Authenticates an active staff/admin user with email and password. Returns JWT access and refresh tokens.",
         request=AdminLoginSerializer,
         responses={
             200: AdminLoginResponseSerializer,

@@ -3,6 +3,7 @@ from django.test import TestCase
 # Create your tests here.
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -12,11 +13,13 @@ from accounts.choices import OTPPurpose
 from accounts.models import OTPVerification, User
 from accounts.views import (
     AdminProfileAPIView,
+    AdminLoginAPIView,
     AdminUserDetailAPIView,
     AdminUserExportCSVAPIView,
     AdminUserListAPIView,
     ChangePasswordAPIView,
     ClientSignupAPIView,
+    ClientSendOTPAPIView,
     ClientVerifyOTPAPIView,
     CurrentUserAPIView,
     CurrentUserCheseraNumberAPIView,
@@ -34,6 +37,9 @@ from sentdm.models import SentDMCampaign, SentDMMessage, SentDMProfile
 
 class ClientSignupAPIViewTests(TestCase):
     def setUp(self):
+        self.sms_patcher = patch("accounts.views.send_registration_otp_sms")
+        self.mock_send_registration_otp = self.sms_patcher.start()
+        self.addCleanup(self.sms_patcher.stop)
         self.factory = APIRequestFactory()
         self.payload = {
             "full_name": "Test Agent",
@@ -67,6 +73,7 @@ class ClientSignupAPIViewTests(TestCase):
         )
         self.assertEqual(response.data["data"]["user"]["city"], "Austin")
         self.assertEqual(response.data["data"]["user"]["country"], "United States")
+        self.mock_send_registration_otp.assert_called_once()
 
     def test_signup_updates_existing_unverified_user_and_resends_otp(self):
         user = User.objects.create(
@@ -119,6 +126,110 @@ class ClientSignupAPIViewTests(TestCase):
         self.assertEqual(response.data["data"]["user"]["city"], "Austin")
         self.assertEqual(response.data["data"]["user"]["country"], "United States")
         self.assertEqual(response.data["data"]["user"]["country_code"], "+1")
+
+
+class ClientEmailOTPLoginAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = User.objects.create(
+            phone_number="+15558881111",
+            email="agent@example.com",
+            full_name="Email Agent",
+            is_phone_verified=True,
+            user_type="CLIENT",
+        )
+
+    @patch("accounts.views.send_login_otp_email")
+    def test_send_login_otp_uses_registered_email(self, mocked_send):
+        request = self.factory.post(
+            "/api/v1/client/auth/send-otp/",
+            {"email": "Agent@Example.com"},
+            format="json",
+        )
+
+        response = ClientSendOTPAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        otp = OTPVerification.objects.get(user=self.user, purpose=OTPPurpose.LOGIN)
+        self.assertEqual(otp.email, "agent@example.com")
+        self.assertEqual(otp.phone_number, "")
+        mocked_send.assert_called_once_with(email="agent@example.com", otp=otp.otp_code)
+        self.assertEqual(response.data["data"]["delivery_channel"], "email")
+        self.assertNotEqual(response.data["data"]["email"], "agent@example.com")
+
+    @patch("accounts.views.send_login_otp_email")
+    def test_verify_email_login_otp_returns_tokens(self, mocked_send):
+        send_request = self.factory.post(
+            "/api/v1/client/auth/send-otp/",
+            {"email": "agent@example.com"},
+            format="json",
+        )
+        ClientSendOTPAPIView.as_view()(send_request)
+        otp = OTPVerification.objects.get(user=self.user, purpose=OTPPurpose.LOGIN)
+        verify_request = self.factory.post(
+            "/api/v1/client/auth/verify-otp/",
+            {"email": "agent@example.com", "otp": otp.otp_code},
+            format="json",
+        )
+
+        response = ClientVerifyOTPAPIView.as_view()(verify_request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data["data"])
+        self.assertIn("refresh", response.data["data"])
+
+    @patch("accounts.views.send_login_otp_email")
+    def test_unverified_user_cannot_request_email_login_otp(self, mocked_send):
+        self.user.is_phone_verified = False
+        self.user.save(update_fields=["is_phone_verified"])
+        request = self.factory.post(
+            "/api/v1/client/auth/send-otp/",
+            {"email": "agent@example.com"},
+            format="json",
+        )
+
+        response = ClientSendOTPAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        mocked_send.assert_not_called()
+
+
+class AdminEmailLoginAPIViewTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.admin = User.objects.create_user(
+            phone_number="+15558882222",
+            email="admin@example.com",
+            password="StrongAdminPass123!",
+            is_staff=True,
+            user_type="ADMIN",
+        )
+
+    def test_admin_logs_in_with_email_and_password(self):
+        request = self.factory.post(
+            "/api/v1/admin/auth/login/",
+            {"email": "ADMIN@example.com", "password": "StrongAdminPass123!"},
+            format="json",
+        )
+
+        response = AdminLoginAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data["data"])
+        self.assertEqual(response.data["data"]["user"]["email"], "admin@example.com")
+
+    def test_non_staff_cannot_use_admin_login(self):
+        self.admin.is_staff = False
+        self.admin.save(update_fields=["is_staff"])
+        request = self.factory.post(
+            "/api/v1/admin/auth/login/",
+            {"email": "admin@example.com", "password": "StrongAdminPass123!"},
+            format="json",
+        )
+
+        response = AdminLoginAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
 
 class CurrentUserAPIViewTests(TestCase):
     def setUp(self):

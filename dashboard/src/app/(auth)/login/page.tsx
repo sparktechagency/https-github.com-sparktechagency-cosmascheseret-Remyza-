@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
@@ -33,16 +32,15 @@ export default function LoginPage() {
       return;
     }
 
-    // Simulate API call delay
-    setTimeout(() => {
-      if (login(email, password)) {
-        router.push("/dashboard");
-      } else {
-        setError("Invalid email or password");
-        setPassword("");
-      }
-      setIsLoading(false);
-    }, 800);
+    const result = await login(email, password);
+    if (result.success) {
+      router.push("/dashboard");
+      router.refresh();
+    } else {
+      setError(result.message || "Invalid email or password");
+      setPassword("");
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -156,12 +154,9 @@ export default function LoginPage() {
                   Remember me
                 </span>
               </label>
-              <Link
-                href="/forgot-password"
-                className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-              >
-                Forgot Password?
-              </Link>
+              <span className="max-w-48 text-right text-xs text-slate-500">
+                Contact another administrator if you need a password reset.
+              </span>
             </div>
 
             {/* Submit Button */}
@@ -182,7 +177,7 @@ export default function LoginPage() {
           </form>
 
           {/* Demo Credentials Info */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+          <div className="hidden bg-blue-50 border border-blue-100 rounded-xl p-4">
             <p className="text-xs font-semibold text-blue-900 mb-2">
               Demo Credentials:
             </p>
