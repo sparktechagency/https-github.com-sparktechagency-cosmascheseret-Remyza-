@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { X, Download, FileText, Check } from "lucide-react";
+import { Download, FileText, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // Available Exportable Columns Blueprint Configuration

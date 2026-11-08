@@ -285,7 +285,7 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Add Nginx `/ws/` websocket proxy block with Upgrade headers.
 - [x] Wire notification hooks into signup, subscription records, Sent.dm profile/campaign/WhatsApp actions, and inbound new-lead capture.
 - [x] Add cleanup Celery task for old read notifications.
-- [ ] Frontend/mobile: wire notification list, unread count, and read actions.
+- [~] Frontend/mobile: admin dashboard notification list, unread count, and read actions are wired; mobile/client UI remains.
 - [ ] Admin dashboard: wire websocket connection and live notification UI.
 - [ ] Production: after deploy, confirm Daphne websocket handshake through Nginx for `/ws/admin/notifications/`.
 
@@ -300,7 +300,7 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Backend: route WhatsApp/auto follow-ups outside Meta's 24-hour customer-service window to SMS.
 - [x] Backend: create notifications when follow-ups are scheduled, sent, or fail.
 - [x] Backend: cancel pending automated follow-ups when the lead opts out with STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT.
-- [ ] Production: ensure a Celery beat process is running so the every-minute follow-up task executes.
+- [~] Production: Celery beat is now defined in production Compose; confirm it is healthy after the next deployment.
 - [ ] Production: run migrations for `crm.AutomatedFollowUp` and new notification type choices.
 - [ ] Frontend/mobile: display follow-up notifications in the existing notification UI.
 
@@ -308,9 +308,9 @@ crm/migrations/0004_alter_followupreminder_id.py
 
 - [x] Replace demo admin login with the real email/password backend API.
 - [x] Keep admin JWTs in server-managed HTTP-only cookies instead of browser localStorage.
-- [x] Hide the unsupported simulated forgot-password flow from the login page.
-- [ ] Implement a real admin password-recovery API and re-enable the forgot-password UI only if approved.
-- [ ] Complete dashboard API integration for users, subscriptions, revenue, analytics, messages, notifications, settings, FAQs, and legal pages.
-- [ ] Add missing server-side filtering/search parameters identified during dashboard integration.
-- [ ] Run dashboard lint and production build after npm dependencies install successfully.
-- [ ] Add dashboard Docker image/service, CI/CD build/push, Nginx host, and SSL for `admin.trychesera.com`.
+- [x] Replace simulated forgot-password screens with real email OTP password recovery.
+- [x] Add short-lived, one-time-use admin password-reset tokens and password validation.
+- [x] Complete dashboard API integration for users, subscriptions, revenue, analytics, messages, notifications, settings, FAQs, and legal pages.
+- [x] Add missing server-side filtering/search parameters for subscriber and admin message lists.
+- [x] Run dashboard TypeScript checks, lint, and production build successfully.
+- [~] Dashboard Docker image/service, CI/CD image build/push, and final Nginx host config are implemented. DNS, ECR repository/variable, first deployment, and Certbot issuance for `admin.trychesera.com` remain operator steps.

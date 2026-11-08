@@ -306,9 +306,10 @@ Do this **once** on the server before the first CI/CD run.
 mkdir -p ~/app
 cd ~/app
 
-# Create .env from the template
+# Create .env only on a new server. If ~/app/.env already exists, keep it
+# and update the required values instead of replacing it.
 nano .env
-# ? Paste contents of .env.production.example with all real values filled in
+# Use .env.production.example from the repository only as a reference template.
 
 # Pull and start manually the first time
 aws ecr get-login-password --region us-east-1 | \
@@ -603,3 +604,169 @@ free -h
 | `cheshara_config/settings.py` | Updated: PostgreSQL, S3 storage, env-based email |
 | `requirements.txt` | Added production/runtime dependencies: gunicorn, psycopg2-binary, django-storages, boto3, Celery, Redis client |
 | `.codex/DEPLOYMENT.md` | This guide |
+
+---
+
+## 16. ADMIN DASHBOARD DEPLOYMENT (`admin.trychesera.com`)
+
+The repository now builds and deploys two production images:
+
+- Django/ASGI backend image
+- Next.js admin dashboard image
+
+Production Compose exposes the dashboard only on EC2 loopback at `127.0.0.1:3000`; public traffic must pass through Nginx and HTTPS.
+
+### 16.1 DNS request for the domain owner
+
+Send this message:
+
+> Please add an A record for `admin.trychesera.com` pointing to the same EC2 public/Elastic IP currently used by `api.trychesera.com`. Use host/name `admin`, type `A`, and TTL `300` (or the provider default). Please let me know once it has propagated.
+
+Verify from EC2 or locally:
+
+```bash
+nslookup admin.trychesera.com
+```
+
+### 16.2 Create the dashboard ECR repository
+
+Create one additional private ECR repository, for example:
+
+```text
+remyza-dashboard
+```
+
+In GitHub repository settings, add this Actions variable:
+
+```text
+DASHBOARD_ECR_REPOSITORY=remyza-dashboard
+```
+
+Keep the existing backend `ECR_REPOSITORY` variable unchanged. Existing AWS/ECR/EC2 secrets are reused.
+
+### 16.3 Update the EC2 backend environment
+
+Keep using the existing production environment file at `/home/ubuntu/app/.env`. No rename to `.env.production` is required.
+
+Production Compose loads this file using `format: raw`. This passes values such as passwords and API secrets to the containers literally, including values containing `$` characters. The committed `.env.production.example` file is only a reference template; it is not the filename expected on the EC2 server.
+
+Make sure the existing file remains private:
+
+```bash
+cd ~/app
+chmod 600 .env
+```
+
+The `format: raw` setting requires Docker Compose 2.30 or newer. Confirm before deployment:
+
+```bash
+docker compose version
+```
+
+Upgrade the Docker Compose plugin first if the installed version is older than 2.30.
+
+The Next.js server calls Django over the internal Docker hostname `backend`. Update the existing `/home/ubuntu/app/.env` so Django permits that host:
+
+```text
+ALLOWED_HOSTS=api.trychesera.com,trychesera.com,www.trychesera.com,backend,localhost,YOUR_EC2_PUBLIC_IP
+CSRF_TRUSTED_ORIGINS=https://api.trychesera.com,https://admin.trychesera.com,https://trychesera.com,https://www.trychesera.com
+PASSWORD_RESET_THROTTLE_RATE=5/hour
+PASSWORD_RESET_VERIFY_THROTTLE_RATE=10/hour
+```
+
+Do not put `API_BASE_URL` in the browser or a `NEXT_PUBLIC_*` variable. Compose supplies the server-only value:
+
+```text
+API_BASE_URL=http://backend:8005/api/v1
+```
+
+### 16.4 First dashboard deployment
+
+After the ECR repository and GitHub variable exist, push to `main`. GitHub Actions will:
+
+1. Build/push the backend image.
+2. Build/push the dashboard image.
+3. Upload the current production Compose file to EC2.
+4. Start/update backend, worker, Celery beat, Redis, and dashboard containers.
+
+On EC2, verify:
+
+```bash
+cd ~/app
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 dashboard
+docker compose -f docker-compose.prod.yml logs --tail=100 beat
+curl -I http://127.0.0.1:3000/login
+curl -I http://127.0.0.1:8005/api/v1/health/
+```
+
+Both curl commands should return HTTP 200 (a redirect from `/login` is also acceptable if Next.js routing changes later).
+
+### 16.5 Issue SSL safely
+
+Do not install the final repository Nginx config before the admin certificate exists, because its certificate paths will fail `nginx -t`.
+
+First create a temporary HTTP-only site on EC2:
+
+```bash
+sudo nano /etc/nginx/sites-available/chesera-admin-temp
+```
+
+Paste:
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name admin.trychesera.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Enable and test it:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/chesera-admin-temp /etc/nginx/sites-enabled/chesera-admin-temp
+sudo nginx -t
+sudo systemctl reload nginx
+curl -I http://admin.trychesera.com
+```
+
+Issue the certificate:
+
+```bash
+sudo certbot --nginx -d admin.trychesera.com
+```
+
+After Certbot succeeds, replace `/etc/nginx/sites-available/remyza` with the final contents of repository file `nginx/nginx.conf`, then remove only the temporary site and reload:
+
+```bash
+sudo rm -f /etc/nginx/sites-enabled/chesera-admin-temp
+sudo rm -f /etc/nginx/sites-available/chesera-admin-temp
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Verify:
+
+```bash
+curl -I https://admin.trychesera.com/login
+sudo certbot renew --dry-run
+```
+
+### 16.6 Dashboard logs and rollback checks
+
+```bash
+docker compose -f ~/app/docker-compose.prod.yml logs -f dashboard
+sudo tail -f /var/log/nginx/chesera_admin_access.log
+sudo tail -f /var/log/nginx/chesera_admin_error.log
+```
+
+If Nginx returns `502`, first confirm `cheshara_dashboard` is healthy and `curl -I http://127.0.0.1:3000/login` works.

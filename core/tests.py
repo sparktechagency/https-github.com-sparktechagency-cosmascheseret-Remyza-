@@ -4,7 +4,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from accounts.choices import UserType
 from accounts.models import User
 from core.models import GeneralSettings
-from core.views import AdminGeneralSettingsAPIView
+from core.views import AdminGeneralSettingsAPIView, HealthCheckAPIView
 from notifications.models import Notification, NotificationType
 
 
@@ -80,3 +80,10 @@ class AdminGeneralSettingsAPIViewTests(TestCase):
                 title="Maintenance mode enabled",
             ).exists()
         )
+
+
+class HealthCheckAPIViewTests(TestCase):
+    def test_health_check_is_public(self):
+        response = HealthCheckAPIView.as_view()(APIRequestFactory().get("/api/v1/health/"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"status": "ok"})

@@ -16,6 +16,15 @@ import { useDashboard } from "@/providers/DashboardStateProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { useEffect } from "react";
 
+const navItems = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutGrid },
+  { label: "User Management", href: "/dashboard/users-manage", icon: Users },
+  { label: "Total Revenue & Subscriptions", href: "/dashboard/total-revenue-subscriptions", icon: Banknote },
+  { label: "Message Logs", href: "/dashboard/message-logs", icon: MessageSquare },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings },
+];
+
 export default function DashboardSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -23,22 +32,6 @@ export default function DashboardSidebar() {
 
   const { sidebarOpen, setSidebarOpen, setPageTitle } = useDashboard();
 
-  const navItems = [
-    { label: "Dashboard", href: "/dashboard", icon: LayoutGrid },
-    { label: "User Management", href: "/dashboard/users-manage", icon: Users },
-    {
-      label: "Total Revenue & Subscriptions",
-      href: "/dashboard/total-revenue-subscriptions",
-      icon: Banknote,
-    },
-    {
-      label: "Message Logs",
-      href: "/dashboard/message-logs",
-      icon: MessageSquare,
-    },
-    { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-    { label: "Settings", href: "/dashboard/settings", icon: Settings },
-  ];
   // create here logout functionality
   const handleLogout = async () => {
     try {

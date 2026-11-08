@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { X, Bell, Mail, MessageSquare } from "lucide-react";
+import { Bell, Mail, MessageSquare } from "lucide-react";
 import {
   Dialog,
   DialogContent,

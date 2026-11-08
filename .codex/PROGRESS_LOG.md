@@ -928,3 +928,40 @@ Validation run:
   - `.venv\Scripts\python.exe manage.py makemigrations accounts --check --dry-run`
   - 17 focused accounts/Sent.dm authentication tests
 - Dashboard dependency installation did not complete in the local environment, so Next.js lint/build verification remains pending.
+
+## 2026-11-08 - Admin Dashboard Live API Integration
+
+- Added a shared authenticated Next.js backend proxy with HTTP-only JWT cookies and token refresh.
+- Replaced dashboard mock data with Django API data for overview, users, subscriptions, revenue, analytics, messages, conversations, settings, FAQs, legal content, admin profile, and notifications.
+- Added server-side subscriber search/plan/status filters and message search/status/direction/channel/user filters.
+- Added paginated read-only admin conversation history and live message detail views.
+- Connected CSV/XLSX user export options to the backend export endpoint.
+- Connected general settings, maintenance mode, admin profile uploads, password changes, FAQ CRUD, privacy policy, and terms updates.
+- Connected REST notifications, unread count, mark-one-read, and mark-all-read behavior.
+- Replaced simulated admin password recovery with email OTP request/verification and a short-lived, one-time-use signed reset token.
+- Removed the dashboard's build-time dependency on Google Fonts.
+- Verification passed:
+  - 21 focused backend tests covering password recovery, message monitoring/filtering, and subscription/revenue analytics/filtering
+  - `.venv\Scripts\python.exe manage.py check`
+  - `npx tsc --noEmit`
+  - `npm run lint` with zero errors
+  - `npm run build`
+- Remaining admin dashboard milestone: Docker/CI/CD/Nginx/SSL deployment for `admin.trychesera.com`; admin websocket notification UI remains optional follow-up work.
+
+## 2026-11-08 - Admin Dashboard Deployment Infrastructure
+
+- Added `dashboard/Dockerfile.prod` using Next.js standalone output and a non-root runtime user.
+- Added the dashboard service to production Compose on `127.0.0.1:3000` with internal backend routing and a health check.
+- Added a production Celery beat service so scheduled Day 1/3/7/14 follow-up tasks can run after deployment.
+- Added public Django health endpoint `/api/v1/health/` and test coverage.
+- Kept the existing production `.env` file and changed service loading to Compose raw format so `$` characters in secrets are preserved literally.
+- Extended GitHub Actions to build/push separate backend and dashboard ECR images and upload the current Compose file before deployment.
+- Added final Nginx reverse proxy/SSL configuration for `admin.trychesera.com`.
+- Added step-by-step DNS, ECR, EC2 environment, first-deploy, temporary HTTP Nginx, Certbot, final Nginx, and verification instructions to `.codex/DEPLOYMENT.md`.
+- Verification passed:
+  - production Compose configuration validation
+  - GitHub Actions YAML parse
+  - Django health endpoint test
+  - Django system check
+  - Next.js production standalone build and `server.js` output check
+- Local Docker image build could not run because Docker Desktop's Linux daemon was not running; GitHub Actions will perform the authoritative container build on push.

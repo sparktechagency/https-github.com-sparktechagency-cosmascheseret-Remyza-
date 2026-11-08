@@ -459,7 +459,7 @@ Updated on 2026-10-27:
 
 ## CURRENT AUTHENTICATION CONTRACT
 
-Updated on 2026-11-05:
+Updated on 2026-11-08:
 
 - Client registration requires full profile details and sends one registration OTP to the submitted phone number through a Chesera-owned Sent.dm system Sender Profile.
 - Phone SMS OTP is used only to verify the mobile number during registration.
@@ -474,4 +474,34 @@ Updated on 2026-11-05:
   - `SENTDM_SYSTEM_PROFILE_ID`
   - `SENTDM_OTP_TEMPLATE_ID` (preferred) or `SENTDM_OTP_TEMPLATE_NAME`
 - The admin Next.js dashboard now performs real admin login through a server-side route. Access and refresh JWTs are stored in HTTP-only cookies, not localStorage.
-- The dashboard's old demo login is disabled. Its simulated forgot-password flow is no longer linked from the login page and must not be enabled until a real reset API is implemented.
+- Admin password recovery is implemented through email OTP:
+  - `POST /api/v1/admin/auth/password-reset/request/`
+  - `POST /api/v1/admin/auth/password-reset/verify/`
+  - `POST /api/v1/admin/auth/password-reset/confirm/`
+- Password reset uses a throttled email OTP, a signed token that expires after 10 minutes, Django password validation, and one-time-use enforcement.
+- The Next.js forgot-password, OTP verification, and new-password pages now call the real backend flow; demo OTP/password behavior has been removed.
+
+## CURRENT ADMIN DASHBOARD API INTEGRATION
+
+Updated on 2026-11-08:
+
+- The dashboard uses a server-side `/api/backend/[...path]` proxy with HTTP-only access/refresh cookies and automatic JWT refresh.
+- Live API integrations are complete for overview metrics, user management/export, subscriptions/revenue, revenue analytics, message logs, message details, paginated conversations, notifications, general settings, admin profile, password change, FAQ CRUD, privacy policy, and terms of service.
+- User, subscriber, message, and conversation lists use server-backed pagination where applicable.
+- User/subscriber/message search and filters are sent to Django instead of filtering mock arrays in the browser.
+- Admin message monitoring remains intentionally read-only.
+- Production build does not depend on downloading Google Fonts during deployment; it uses a system font stack.
+- Remaining dashboard work is the operator rollout for `admin.trychesera.com` plus optional admin websocket live-notification wiring.
+
+## CURRENT ADMIN DASHBOARD DEPLOYMENT
+
+Updated on 2026-11-08:
+
+- `dashboard/Dockerfile.prod` builds a non-root Next.js standalone production image.
+- `docker-compose.prod.yml` now runs dashboard on EC2 loopback port `3000` and adds a dedicated Celery beat service for scheduled follow-ups.
+- The dashboard receives server-only `API_BASE_URL=http://backend:8005/api/v1`; browser code does not receive backend credentials or JWTs.
+- Production services keep using the existing EC2 `.env` file. Compose loads it with raw format so `$` characters in secrets are preserved literally.
+- Django now exposes an unauthenticated `/api/v1/health/` endpoint used by the backend container health check.
+- CI/CD builds and pushes separate backend and dashboard ECR images, uploads the current production Compose file, and deploys both images.
+- Final Nginx configuration proxies `admin.trychesera.com` to `127.0.0.1:3000` with HTTPS.
+- Operator steps still required: create dashboard ECR repository/GitHub variable, add DNS A record, confirm the existing EC2 `.env`, run first deployment, and issue the admin-domain certificate.

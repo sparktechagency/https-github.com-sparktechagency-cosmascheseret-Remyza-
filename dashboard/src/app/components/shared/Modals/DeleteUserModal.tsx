@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, AlertTriangle, XCircle } from "lucide-react";
+import { AlertTriangle, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 
 interface DeleteUserModalProps {

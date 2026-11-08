@@ -1,7 +1,7 @@
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from django.db import transaction
 from rest_framework import status
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from core.utils.viewsets import OwnModelViewSet
@@ -19,6 +19,15 @@ from accounts.choices import UserType
 from accounts.models import User
 from notifications.models import NotificationPriority, NotificationType
 from notifications.services import NotificationService
+
+
+class HealthCheckAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(exclude=True)
+    def get(self, request):
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
 
 class BusinessTypeViewSet(OwnModelViewSet):

@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .views import (
     AdminGeneralSettingsAPIView,
+    HealthCheckAPIView,
     BusinessTypeViewSet,
     IndustryViewSet,
     # Twilio/free-trial number routes are disabled while Chesera moves messaging to Sent.dm.
@@ -16,6 +17,7 @@ router.register("industries", IndustryViewSet, basename="industry")
 # router.register("free-trail-number", FreeTrailPhoneNumberViewSet, basename="free-trail-number")
 
 urlpatterns = [
+    path("health/", HealthCheckAPIView.as_view(), name="health-check"),
     path("", include(router.urls)),
     path("admin/settings/general/", AdminGeneralSettingsAPIView.as_view(), name="admin-general-settings"),
 
