@@ -986,3 +986,7 @@ Validation run:
 - Kept strict production behavior unchanged when the switch is disabled.
 - Made the temporary plaintext OTP read-only in Django Admin and added tests
   for both fallback preservation and strict transaction rollback.
+- Reused the same temporary setting for client email-login OTPs. SMTP delivery
+  remains the first attempt; when it fails in fallback mode, the OTP is kept in
+  Django Admin. Strict mode still deletes the undelivered login OTP and returns
+  the delivery error.

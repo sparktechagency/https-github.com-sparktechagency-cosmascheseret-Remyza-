@@ -8,6 +8,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from accounts.choices import OTPPurpose
 from accounts.models import OTPVerification, User
+from accounts.services import OTPDeliveryError
 from accounts.views import (
     AdminProfileAPIView,
     AdminLoginAPIView,
@@ -244,6 +245,7 @@ class ClientSignupAdminOTPFallbackTests(TestCase):
 
 class ClientEmailOTPLoginAPIViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.factory = APIRequestFactory()
         self.user = User.objects.create(
             phone_number="+15558881111",
@@ -306,6 +308,42 @@ class ClientEmailOTPLoginAPIViewTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         mocked_send.assert_not_called()
+
+    @override_settings(REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED=True)
+    @patch("accounts.views.send_login_otp_email", side_effect=OTPDeliveryError("SMTP unavailable"))
+    def test_preserves_login_otp_for_admin_when_email_delivery_fails(self, mocked_send):
+        request = self.factory.post(
+            "/api/v1/client/auth/send-otp/",
+            {"email": "agent@example.com"},
+            format="json",
+        )
+
+        response = ClientSendOTPAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("admin testing", response.data["message"])
+        self.assertEqual(response.data["data"]["delivery_channel"], "admin_test_fallback")
+        otp = OTPVerification.objects.get(user=self.user, purpose=OTPPurpose.LOGIN)
+        self.assertTrue(otp.otp_code)
+        self.assertFalse(otp.is_used)
+        mocked_send.assert_called_once()
+
+    @override_settings(REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED=False)
+    @patch("accounts.views.send_login_otp_email", side_effect=OTPDeliveryError("SMTP unavailable"))
+    def test_deletes_login_otp_when_email_delivery_fails_in_strict_mode(self, mocked_send):
+        request = self.factory.post(
+            "/api/v1/client/auth/send-otp/",
+            {"email": "agent@example.com"},
+            format="json",
+        )
+
+        response = ClientSendOTPAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(
+            OTPVerification.objects.filter(user=self.user, purpose=OTPPurpose.LOGIN).exists()
+        )
+        mocked_send.assert_called_once()
 
 
 class AdminEmailLoginAPIViewTests(TestCase):

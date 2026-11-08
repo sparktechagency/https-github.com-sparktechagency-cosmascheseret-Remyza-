@@ -292,9 +292,10 @@ SENTDM_SANDBOX_MODE = os.getenv("SENTDM_SANDBOX_MODE", "True").strip().lower() i
 SENTDM_SYSTEM_PROFILE_ID = os.getenv("SENTDM_SYSTEM_PROFILE_ID", "")
 SENTDM_OTP_TEMPLATE_ID = os.getenv("SENTDM_OTP_TEMPLATE_ID", "")
 SENTDM_OTP_TEMPLATE_NAME = os.getenv("SENTDM_OTP_TEMPLATE_NAME", "")
-# Temporary operator-only fallback for registration testing while the Chesera
-# system Sender Profile/template is awaiting approval. Keep this False once
-# live Sent.dm delivery is configured.
+# Temporary operator-only OTP fallback while Sent.dm registration SMS and
+# login-email delivery are being configured. Despite the legacy setting name,
+# it controls both registration and client-login admin testing. Keep it False
+# once both delivery channels are live.
 REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED = os.getenv(
     "REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED", "False"
 ).strip().lower() in ("true", "1", "yes")

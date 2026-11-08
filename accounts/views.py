@@ -4,6 +4,7 @@ from datetime import timedelta
 from io import BytesIO
 
 import qrcode
+from django.conf import settings
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -145,16 +146,24 @@ class ClientSendOTPAPIView(APIView):
         try:
             send_login_otp_email(email=email, otp=otp)
         except Exception:
-            otp_obj.delete()
-            raise
+            if not getattr(settings, "REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED", False):
+                otp_obj.delete()
+                raise
+            using_admin_fallback = True
+        else:
+            using_admin_fallback = False
 
         return Response(
             {
                 "success": True,
-                "message": "Login OTP sent to your registered email address.",
+                "message": (
+                    "Login OTP generated for authorized admin testing; email delivery is temporarily unavailable."
+                    if using_admin_fallback
+                    else "Login OTP sent to your registered email address."
+                ),
                 "data": {
                     "email": mask_email(email),
-                    "delivery_channel": "email",
+                    "delivery_channel": "admin_test_fallback" if using_admin_fallback else "email",
                 }
             },
             status=status.HTTP_200_OK,
@@ -1344,7 +1353,7 @@ ClientSendOTPAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],
         summary="Send login OTP",
-        description="Sends a login OTP to the registered email address of an existing, active, phone-verified client. This endpoint never creates a user and does not send a login SMS.",
+        description="Sends a login OTP to the registered email address of an existing, active, phone-verified client. This endpoint never creates a user and does not send a login SMS. While email delivery is being configured, the same temporary operator-controlled OTP fallback used by registration may preserve the code in Django Admin for authorized testing.",
         request=ClientSendOTPSerializer,
         responses={
             200: ClientSendOTPResponseSerializer,

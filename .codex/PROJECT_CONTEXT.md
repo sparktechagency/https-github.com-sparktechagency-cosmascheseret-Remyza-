@@ -479,6 +479,10 @@ Updated on 2026-11-08:
   preserve an OTP when delivery is unavailable. The backend still attempts
   real Sent.dm delivery first. This setting defaults to `False` and must be
   returned to `False` when live delivery is ready.
+- The same temporary flag is deliberately reused for failed client login-email
+  delivery: SMTP is attempted first; if it fails while the flag is enabled,
+  the login OTP remains visible in Django Admin and the API reports
+  `delivery_channel=admin_test_fallback`. No separate fallback setting exists.
 - The admin Next.js dashboard now performs real admin login through a server-side route. Access and refresh JWTs are stored in HTTP-only cookies, not localStorage.
 - Admin password recovery is implemented through email OTP:
   - `POST /api/v1/admin/auth/password-reset/request/`
