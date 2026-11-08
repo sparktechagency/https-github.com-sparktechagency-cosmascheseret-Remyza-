@@ -473,6 +473,12 @@ Updated on 2026-11-08:
 - Sent.dm registration OTP sends use a pre-approved template and require:
   - `SENTDM_SYSTEM_PROFILE_ID`
   - `SENTDM_OTP_TEMPLATE_ID` (preferred) or `SENTDM_OTP_TEMPLATE_NAME`
+- Active registration OTPs are visible to authorized staff under Django Admin
+  > OTP Verifications. While the system Sender Profile/template is awaiting
+  approval, `REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED=True` can temporarily
+  preserve an OTP when delivery is unavailable. The backend still attempts
+  real Sent.dm delivery first. This setting defaults to `False` and must be
+  returned to `False` when live delivery is ready.
 - The admin Next.js dashboard now performs real admin login through a server-side route. Access and refresh JWTs are stored in HTTP-only cookies, not localStorage.
 - Admin password recovery is implemented through email OTP:
   - `POST /api/v1/admin/auth/password-reset/request/`

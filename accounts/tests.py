@@ -1,11 +1,8 @@
-from django.test import TestCase
-
-# Create your tests here.
-
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
@@ -192,6 +189,57 @@ class ClientSignupAPIViewTests(TestCase):
         self.assertEqual(response.data["data"]["user"]["city"], "Austin")
         self.assertEqual(response.data["data"]["user"]["country"], "United States")
         self.assertEqual(response.data["data"]["user"]["country_code"], "+1")
+
+
+class ClientSignupAdminOTPFallbackTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.factory = APIRequestFactory()
+        self.payload = {
+            "full_name": "Fallback Agent",
+            "email": "fallback@example.com",
+            "phone_number": "+15558889999",
+            "city": "Austin",
+            "country": "United States",
+            "country_code": "+1",
+        }
+
+    @override_settings(
+        SENTDM_SYSTEM_PROFILE_ID="",
+        SENTDM_OTP_TEMPLATE_ID="",
+        SENTDM_OTP_TEMPLATE_NAME="",
+        REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED=True,
+    )
+    def test_preserves_signup_otp_for_admin_when_temporary_fallback_is_enabled(self):
+        request = self.factory.post("/api/v1/client/auth/signup/", self.payload, format="json")
+
+        response = ClientSignupAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("admin testing", response.data["message"])
+        otp = OTPVerification.objects.get(
+            phone_number=self.payload["phone_number"],
+            purpose=OTPPurpose.REGISTER,
+        )
+        self.assertTrue(otp.otp_code)
+        self.assertFalse(otp.is_used)
+
+    @override_settings(
+        SENTDM_SYSTEM_PROFILE_ID="",
+        SENTDM_OTP_TEMPLATE_ID="",
+        SENTDM_OTP_TEMPLATE_NAME="",
+        REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED=False,
+    )
+    def test_strict_mode_rolls_back_signup_when_sms_is_not_configured(self):
+        request = self.factory.post("/api/v1/client/auth/signup/", self.payload, format="json")
+
+        response = ClientSignupAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(User.objects.filter(phone_number=self.payload["phone_number"]).exists())
+        self.assertFalse(
+            OTPVerification.objects.filter(phone_number=self.payload["phone_number"]).exists()
+        )
 
 
 class ClientEmailOTPLoginAPIViewTests(TestCase):

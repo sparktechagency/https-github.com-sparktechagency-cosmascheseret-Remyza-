@@ -96,10 +96,13 @@ class ClientSignupAPIView(APIView):
             phone_number=phone,
             purpose=OTPPurpose.REGISTER,
         )
-        send_registration_otp_sms(
+        delivery_result = send_registration_otp_sms(
             phone_number=phone,
             otp=otp,
             otp_id=otp_obj.id,
+        )
+        using_admin_fallback = bool(
+            isinstance(delivery_result, dict) and delivery_result.get("admin_fallback")
         )
 
         if created:
@@ -109,7 +112,11 @@ class ClientSignupAPIView(APIView):
         return Response(
             {
                 "success": True,
-                "message": "Signup OTP sent successfully.",
+                "message": (
+                    "Signup OTP generated for authorized admin testing; SMS delivery is temporarily unavailable."
+                    if using_admin_fallback
+                    else "Signup OTP sent successfully."
+                ),
                 "data": {
                     "phone_number": user.phone_number,
                     "is_new_user": created,
@@ -1323,7 +1330,7 @@ ClientSignupAPIView = extend_schema_view(
     post=extend_schema(
         tags=["Auth - User"],
         summary="Signup and send OTP",
-        description="Creates or updates an unverified client user, then sends a one-time registration OTP to the phone number through the configured Chesera Sent.dm system Sender Profile. Phone SMS is used only for registration verification.",
+        description="Creates or updates an unverified client user, then sends a one-time registration OTP to the phone number through the configured Chesera Sent.dm system Sender Profile. Phone SMS is used only for registration verification. A temporary operator-controlled fallback may preserve the OTP in Django Admin for authorized testing while the system Sender Profile is awaiting approval.",
         request=ClientSignupSerializer,
         responses={
             201: ClientSignupResponseSerializer,

@@ -972,3 +972,17 @@ Validation run:
 - Confirmed the root `.gitignore` `lib/` rule unintentionally excluded `dashboard/src/lib/api.ts`, `backend.ts`, and `utils.ts` from Git while local builds continued using them.
 - Explicitly included `dashboard/src/lib/` in version control.
 - Reproduced the complete Node 22 Alpine production Docker build locally; dependency installation, Next.js compilation, standalone output, and image export succeeded.
+
+## 2026-11-08 - Temporary Registration OTP Admin Fallback
+
+- Confirmed registration OTP records disappeared because a Sent.dm
+  configuration error occurred inside the atomic signup transaction and rolled
+  the OTP/user records back.
+- Added the explicit `REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED` switch, disabled
+  by default.
+- When temporarily enabled, signup still attempts real Sent.dm delivery first,
+  but preserves an undelivered OTP for authorized Django-admin testing instead
+  of returning `503`.
+- Kept strict production behavior unchanged when the switch is disabled.
+- Made the temporary plaintext OTP read-only in Django Admin and added tests
+  for both fallback preservation and strict transaction rollback.

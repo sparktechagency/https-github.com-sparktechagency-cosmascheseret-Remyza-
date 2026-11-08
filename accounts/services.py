@@ -20,11 +20,33 @@ def send_registration_otp_sms(*, phone_number, otp, otp_id):
     profile_id = str(getattr(settings, "SENTDM_SYSTEM_PROFILE_ID", "") or "").strip()
     template_id = str(getattr(settings, "SENTDM_OTP_TEMPLATE_ID", "") or "").strip()
     template_name = str(getattr(settings, "SENTDM_OTP_TEMPLATE_NAME", "") or "").strip()
+    admin_fallback_enabled = bool(
+        getattr(settings, "REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED", False)
+    )
+
+    def preserve_for_admin_testing(reason):
+        if not admin_fallback_enabled:
+            raise OTPDeliveryError(reason)
+        logger.warning(
+            "Registration OTP %s was not delivered by Sent.dm and was preserved "
+            "for authorized Django-admin testing: %s",
+            otp_id,
+            reason,
+        )
+        return {
+            "delivered": False,
+            "admin_fallback": True,
+            "reason": reason,
+        }
 
     if not profile_id:
-        raise OTPDeliveryError("Signup SMS is temporarily unavailable because the system Sender Profile is not configured.")
+        return preserve_for_admin_testing(
+            "Signup SMS is temporarily unavailable because the system Sender Profile is not configured."
+        )
     if not template_id and not template_name:
-        raise OTPDeliveryError("Signup SMS is temporarily unavailable because the OTP template is not configured.")
+        return preserve_for_admin_testing(
+            "Signup SMS is temporarily unavailable because the OTP template is not configured."
+        )
 
     try:
         return SentDMClient().send_template_message(
@@ -38,6 +60,8 @@ def send_registration_otp_sms(*, phone_number, otp, otp_id):
         )
     except (SentDMClientError, ValueError) as exc:
         logger.exception("Sent.dm registration OTP delivery failed for OTP id %s", otp_id)
+        if admin_fallback_enabled:
+            return preserve_for_admin_testing(str(OTPDeliveryError.default_detail))
         raise OTPDeliveryError() from exc
 
 

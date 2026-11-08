@@ -184,6 +184,7 @@ sudo certbot renew --dry-run
 - [ ] Confirm server logs are accessible.
 - [ ] Confirm error monitoring/log retention plan.
 - [!] Configure and validate `SENTDM_SYSTEM_PROFILE_ID` plus the approved OTP template ID/name after the Chesera system Sender Profile is approved.
+- [!] Temporary registration testing may use `REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED=True`; return it to `False` immediately after Sent.dm OTP delivery is live.
 - [ ] Configure/validate production SES SMTP credentials and `DEFAULT_FROM_EMAIL` for client login OTP delivery.
 - [x] Fix unrelated CRM migration drift:
 

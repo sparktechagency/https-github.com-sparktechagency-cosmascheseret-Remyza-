@@ -53,7 +53,7 @@ class OTPVerificationAdmin(admin.ModelAdmin):
     search_fields = ("phone_number", "email", "user__phone_number", "user__email")
     autocomplete_fields = ("user",)
     list_select_related = ("user",)
-    readonly_fields = ("otp_hash", "verified_at", "created_at", "updated_at")
+    readonly_fields = ("otp_code", "otp_hash", "verified_at", "created_at", "updated_at")
     ordering = ("-created_at",)
     date_hierarchy = "created_at"
     list_per_page = 25
