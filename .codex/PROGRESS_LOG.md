@@ -964,4 +964,11 @@ Validation run:
   - Django health endpoint test
   - Django system check
   - Next.js production standalone build and `server.js` output check
-- Local Docker image build could not run because Docker Desktop's Linux daemon was not running; GitHub Actions will perform the authoritative container build on push.
+- The full Node 22 Alpine dashboard image now builds successfully using the production Dockerfile.
+
+## 2026-11-08 - Dashboard CI Build Fix
+
+- Diagnosed the GitHub Actions dashboard build failure from the complete step log: Turbopack could not resolve `@/lib/api` in the clean runner checkout.
+- Confirmed the root `.gitignore` `lib/` rule unintentionally excluded `dashboard/src/lib/api.ts`, `backend.ts`, and `utils.ts` from Git while local builds continued using them.
+- Explicitly included `dashboard/src/lib/` in version control.
+- Reproduced the complete Node 22 Alpine production Docker build locally; dependency installation, Next.js compilation, standalone output, and image export succeeded.

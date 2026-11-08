@@ -505,3 +505,4 @@ Updated on 2026-11-08:
 - CI/CD builds and pushes separate backend and dashboard ECR images, uploads the current production Compose file, and deploys both images.
 - Final Nginx configuration proxies `admin.trychesera.com` to `127.0.0.1:3000` with HTTPS.
 - Operator steps still required: create dashboard ECR repository/GitHub variable, add DNS A record, confirm the existing EC2 `.env`, run first deployment, and issue the admin-domain certificate.
+- The first dashboard image build exposed that the root Python-oriented `lib/` ignore rule also excluded `dashboard/src/lib/`. The dashboard library source is now explicitly included so clean Linux/GitHub checkouts contain the API and backend helpers.
