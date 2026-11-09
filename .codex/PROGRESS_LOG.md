@@ -1002,3 +1002,11 @@ Validation run:
 - Added the admin dashboard Billing & Credits settings page.
 - Locked lead AI replies to `gpt-4o-mini`, last 10 messages, and a 160-character maximum.
 - Verification: all 139 backend tests pass; Django system check passes; migration drift check passes; dashboard lint has zero errors; Next.js production build passes; new billing Swagger operations generate without schema errors.
+
+# 2026-11-09 - PRODUCTION COMPOSE DEPLOYMENT FIX
+
+- Removed duplicate `volumes` mappings from the backend, worker, and beat services that caused production Compose parsing to fail.
+- Added a Compose `config --quiet` preflight so invalid deployment configuration is detected before containers are replaced.
+- Added `--env-file /dev/null` to production Compose commands so dollar signs inside application secrets are not interpreted as Compose variables.
+- Kept the service-level `.env` loading with `format: raw`, so containers continue receiving the existing server environment values unchanged.
+- Ensured the mounted `secrets` directory exists before deployment.

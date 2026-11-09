@@ -823,3 +823,24 @@ docker compose -f docker-compose.prod.yml exec backend python manage.py shell -c
 ```
 
 Keep `CreditSettings.enforcement_mode=shadow` during the first production metering period. Switch it to `enforce` from the admin Billing & Credits page only after balances and channel charges have been reviewed.
+
+## Docker Compose validation and secret interpolation
+
+The production workflow validates `docker-compose.prod.yml` before replacing any running containers:
+
+```bash
+docker compose --env-file /dev/null -f docker-compose.prod.yml config --quiet
+```
+
+Use `--env-file /dev/null` for production Compose commands. Compose otherwise auto-loads `~/app/.env` for `${VARIABLE}` interpolation, which can corrupt secret values containing dollar signs and produce warnings such as `The "..." variable is not set`. The backend, worker, and beat still receive the real `~/app/.env` through their service-level `env_file` configured with `format: raw`.
+
+The normal production commands are therefore:
+
+```bash
+cd ~/app
+mkdir -p secrets
+docker compose --env-file /dev/null -f docker-compose.prod.yml config --quiet
+docker compose --env-file /dev/null -f docker-compose.prod.yml pull
+docker compose --env-file /dev/null -f docker-compose.prod.yml up -d --remove-orphans
+docker compose --env-file /dev/null -f docker-compose.prod.yml ps
+```

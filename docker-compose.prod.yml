@@ -25,8 +25,6 @@ services:
         format: raw
     volumes:
       - ./secrets:/run/secrets:ro
-    volumes:
-      - ./secrets:/run/secrets:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -53,8 +51,6 @@ services:
         format: raw
     volumes:
       - ./secrets:/run/secrets:ro
-    volumes:
-      - ./secrets:/run/secrets:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -74,8 +70,6 @@ services:
     env_file:
       - path: .env
         format: raw
-    volumes:
-      - ./secrets:/run/secrets:ro
     volumes:
       - ./secrets:/run/secrets:ro
     depends_on:

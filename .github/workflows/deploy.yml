@@ -112,6 +112,7 @@ jobs:
 
             # Navigate to the app directory
             cd /home/${{ secrets.EC2_USER }}/app
+            mkdir -p secrets
 
             # Update docker-compose to use the new image
             export DOCKER_IMAGE=${{ secrets.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}
@@ -119,9 +120,12 @@ jobs:
             export DASHBOARD_DOCKER_IMAGE=${{ secrets.ECR_REGISTRY }}/${{ vars.DASHBOARD_ECR_REPOSITORY }}
             export DASHBOARD_IMAGE_TAG=latest
 
-            # Restart containers with zero-downtime
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            # Validate and restart containers. /dev/null prevents Compose from
+            # treating values in the app's .env as interpolation variables;
+            # the service-level env_file still loads .env using format: raw.
+            docker compose --env-file /dev/null -f docker-compose.prod.yml config --quiet
+            docker compose --env-file /dev/null -f docker-compose.prod.yml pull
+            docker compose --env-file /dev/null -f docker-compose.prod.yml up -d --remove-orphans
 
             # Remove dangling images to free disk space
             docker image prune -f
