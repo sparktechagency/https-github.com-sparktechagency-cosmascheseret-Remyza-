@@ -36,6 +36,8 @@ class LeadActivityType(models.TextChoices):
 
 class AutomatedFollowUpStatus(models.TextChoices):
     SCHEDULED = "scheduled", "Scheduled"
+    SENDING = "sending", "Sending"
+    PAUSED = "paused", "Paused"
     SENT = "sent", "Sent"
     FAILED = "failed", "Failed"
     CANCELED = "canceled", "Canceled"

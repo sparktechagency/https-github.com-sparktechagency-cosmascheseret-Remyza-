@@ -149,7 +149,7 @@ Messaging activation is in progress. Number assignment may take additional time 
 
 - [~] Wire signup endpoint `POST /api/v1/client/auth/signup/` before OTP verification for new users. Backend phone-OTP flow is complete; mobile UI integration remains.
 - [~] Wire email OTP login using `POST /api/v1/client/auth/send-otp/` and `POST /api/v1/client/auth/verify-otp/`. Backend is complete; mobile UI integration remains.
-- [ ] Wire IAP subscription creation/listing endpoints.
+- [~] Wire IAP billing endpoints. Backend catalog, wallet, usage, estimate, verified entitlement, purchase verification, and restore/sync contracts are implemented; Flutter purchase/restore UI remains.
 - [ ] Wire business compliance form fields.
 - [ ] Wire optional WhatsApp connection endpoint and fields:
 
@@ -315,3 +315,36 @@ crm/migrations/0004_alter_followupreminder_id.py
 - [x] Add missing server-side filtering/search parameters for subscriber and admin message lists.
 - [x] Run dashboard TypeScript checks, lint, and production build successfully.
 - [~] Dashboard Docker image/service, CI/CD image build/push, and final Nginx host config are implemented. DNS, ECR repository/variable, first deployment, and Certbot issuance for `admin.trychesera.com` remain operator steps.
+
+## 22. IN-APP PURCHASES AND CREDITS
+
+- [x] Add editable `BillingPlan`, `StoreProduct`, and singleton `CreditSettings` models.
+- [x] Seed Chesera Pro and the subscription/top-up/setup-fee product catalog.
+- [x] Add immutable subscription snapshots for price, currency, monthly credits, number limit, and features.
+- [x] Close client-authored subscription creation with HTTP 410.
+- [x] Add credit accounts, expiring/non-expiring buckets, append-only ledger, reservations, settlement, release, inbound waiver, expiry, and admin adjustment.
+- [x] Spend monthly/expiring credits before non-expiring purchased top-ups.
+- [x] Add GSM-7/UCS-2/fixed-160 SMS segment pricing and WhatsApp 24-hour conversation charging.
+- [x] Meter direct sends, AI replies, automated follow-ups, and inbound Sent.dm messages.
+- [x] Pause follow-ups at zero credits and resume them after a grant.
+- [x] Add low/exhausted credit notifications and starter-credit grant on successful registration.
+- [x] Add user billing catalog, wallet, transaction, usage, estimate, entitlement, verify, and restore/sync endpoints.
+- [x] Add admin billing settings, plan/product editing, wallet inspection, and manual credit adjustment endpoints.
+- [x] Add server-side Apple signed-transaction verification and authoritative transaction lookup adapter.
+- [x] Add Google Play token verification, subscriptions v2/product lookup, and acknowledge/consume adapter.
+- [x] Switch admin revenue analytics to verified, non-test `StoreTransaction` data.
+- [x] Add setup-fee and test-purchase gates before dedicated-number provisioning.
+- [x] Add Billing & Credits settings UI to the admin dashboard.
+- [x] Lock AI lead replies to `gpt-4o-mini`, last 10 messages, and <=160 characters.
+- [x] Validate with focused backend tests, Django checks, Swagger generation, dashboard lint, and production build.
+- [ ] Add Apple App Store Server Notifications V2 endpoint and reconciler.
+- [ ] Add authenticated Google RTDN Pub/Sub endpoint and reconciler.
+- [ ] Add retry job for Google purchases that were granted but not acknowledged/consumed.
+- [ ] Add refund/revocation credit clawback and admin abuse alerting.
+- [ ] Add daily subscription reconciliation and number-retention review task.
+- [ ] Add demo sender endpoints/routing for starter-credit users (`SENTDM_DEMO_PROFILE_ID`).
+- [ ] Add public Terms, Privacy, and account-deletion pages/URLs required by stores.
+- [ ] Configure App Store/Play Console products, API credentials, Apple root certificate, and Google service account in production.
+- [ ] Mobile: pass `billing_account_token` as Apple `appAccountToken` / Google `obfuscatedAccountId`.
+- [ ] Mobile: implement store purchase stream, verify, restore, finish/complete rules, wallet, top-up prompt, and localized store prices.
+- [!] Automatic unattended top-up is not supported by consumable IAP. Implement a low-balance prompt that opens a user-authorized pack purchase unless product requirements change.

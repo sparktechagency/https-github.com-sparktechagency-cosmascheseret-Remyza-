@@ -990,3 +990,15 @@ Validation run:
   remains the first attempt; when it fails in fallback mode, the OTP is kept in
   Django Admin. Strict mode still deletes the undelivered login OTP and returns
   the delivery error.
+# 2026-11-09 - CHESERA PRO IAP AND CREDIT FOUNDATION
+
+- Added the `credits` app with admin-editable costs, wallet accounts, expiring/non-expiring buckets, ledger transactions, reservations, inbound waivers, balance alerts, and follow-up pause/resume behavior.
+- Added `BillingPlan`, `StoreProduct`, verified store transactions/notifications, and immutable per-subscription price/allowance/feature snapshots.
+- Seeded Chesera Pro plus Apple/Google product IDs for monthly subscription, three top-up packs, and the disabled-at-launch setup fee.
+- Added billing catalog, wallet, usage, estimate, entitlement, purchase verification, purchase restore/sync, and admin billing APIs.
+- Added Apple StoreKit 2 signed-JWS verification and Google Play subscription/product-token verification adapters. Real calls remain dependent on production store credentials and console setup.
+- Metered Sent.dm outbound, AI, follow-up, and inbound traffic; added WhatsApp conversation-window charging and idempotent send behavior.
+- Switched admin revenue calculations from client-reported subscription rows to verified non-test store transactions.
+- Added the admin dashboard Billing & Credits settings page.
+- Locked lead AI replies to `gpt-4o-mini`, last 10 messages, and a 160-character maximum.
+- Verification: all 139 backend tests pass; Django system check passes; migration drift check passes; dashboard lint has zero errors; Next.js production build passes; new billing Swagger operations generate without schema errors.

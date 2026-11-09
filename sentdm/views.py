@@ -10,6 +10,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from notifications.services import NotificationTemplates, safe_notify
+from credits.models import CreditSettings
+from credits.services.wallet import get_credit_account
+from subscription.services.purchase import SubscriptionValidationService
 from .client import SentDMClient, SentDMClientError
 from communications.models import Conversation
 from .choices import SentDMMessageDirection, SentDMMessageStatus
@@ -400,6 +403,28 @@ class SentDMProfileCreateAPIView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        subscription = SubscriptionValidationService.get_current_subscription(request.user)
+        billing_plan = subscription.store_product.plan if subscription and subscription.store_product else None
+        credit_account = get_credit_account(request.user)
+        if billing_plan and billing_plan.setup_fee_enabled and not credit_account.setup_fee_paid_at:
+            return Response(
+                {
+                    "success": False,
+                    "code": "setup_fee_required",
+                    "message": "The one-time setup fee must be completed before number activation.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if subscription and subscription.is_test and not CreditSettings.get_solo().sandbox_allows_number_provisioning:
+            return Response(
+                {
+                    "success": False,
+                    "code": "number_not_available_for_test_purchase",
+                    "message": "Test purchases cannot provision a live dedicated number.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         existing_profile = get_profile_for_user(request.user)
         if existing_profile:
             raise ValidationError(
@@ -713,6 +738,7 @@ class SentDMSendSandboxMessageAPIView(APIView):
                 text=serializer.validated_data["text"],
                 profile=profile,
                 channel=serializer.validated_data["channel"],
+                idempotency_key=request.headers.get("Idempotency-Key"),
             )
             return Response(
                 {
@@ -767,6 +793,7 @@ class SentDMSendMessageAPIView(APIView):
                 text=serializer.validated_data["text"],
                 profile=profile,
                 channel=serializer.validated_data["channel"],
+                idempotency_key=request.headers.get("Idempotency-Key"),
             )
             return Response(
                 {

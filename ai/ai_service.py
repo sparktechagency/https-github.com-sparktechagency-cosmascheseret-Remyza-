@@ -43,6 +43,7 @@ Compliance rules:
 - Do not use link shorteners.
 - Do not make claims, offers, guarantees, or promises outside the business information already provided.
 - Keep replies concise, natural, and useful for a lead conversation.
+- Keep every reply at or below 160 characters so it remains one SMS segment whenever GSM-7 is used.
 - If the lead is ready to buy, book, schedule, or asks for a human, set stage to HOT.
 - If the lead is interested but still comparing or asking questions, set stage to WARM.
 - Otherwise set stage to COLD.
@@ -71,7 +72,7 @@ Return only a valid JSON object using this exact shape:
             if openai is None:
                 raise RuntimeError("OpenAI SDK is not installed.")
             response = openai.ChatCompletion.create(
-                model=self._org_model_name(organization),
+                model=getattr(settings, "OPENAI_REPLY_MODEL", "gpt-4o-mini"),
                 messages=messages,
                 temperature=float(self._org_ai_value(organization, "temperature", 0.30)),
                 max_tokens=int(self._org_ai_value(organization, "max_tokens", 1000)),
@@ -86,13 +87,13 @@ Return only a valid JSON object using this exact shape:
                 stage_str = "COLD"
 
             return {
-                "reply": str(parsed.get("reply", "")).strip(),
+                "reply": self._limit_reply(str(parsed.get("reply", "")).strip()),
                 "stage": stage_str,
             }
         except Exception:
             business_name = self._org_value(organization, "sentdm_legal_name") or self._org_value(organization, "name") or "The business"
             return {
-                "reply": f"{business_name}: Thanks for reaching out. A team member will follow up when available. Reply STOP to opt out.",
+                "reply": self._limit_reply(f"{business_name}: Thanks for reaching out. How can Chesera help? Reply STOP to opt out."),
                 "stage": "HOT",
             }
 
@@ -160,8 +161,15 @@ Return only a valid JSON object using this exact shape:
             return ""
         return str(getattr(ai_config, "system_prompt", "") or "").strip()
 
-    def _org_model_name(self, organization):
-        return str(self._org_ai_value(organization, "model_name", "gpt-4o") or "gpt-4o")
+    def _limit_reply(self, text):
+        text = " ".join(str(text or "").split())
+        if len(text) <= 160:
+            return text
+        opt_out = " Reply STOP to opt out."
+        if "STOP" in text.upper():
+            without_opt_out = text.replace(opt_out.strip(), "").strip()
+            return f"{without_opt_out[: 160 - len(opt_out)].rstrip()}{opt_out}"
+        return text[:157].rstrip() + "..."
 
     def _org_reply_tone(self, organization):
         if not organization:

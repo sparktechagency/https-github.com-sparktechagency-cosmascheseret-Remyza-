@@ -39,6 +39,10 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("id", "uuid", "user", "organization", "app_bundle_id", "is_active", "created_at", "updated_at")
+        extra_kwargs = {
+            "purchase_token": {"write_only": True},
+            "verification_payload": {"write_only": True},
+        }
 
     def validate_medium(self, value):
         if value not in PaymentMediumChoices.values:
@@ -90,6 +94,42 @@ class UserSubscriptionListResponseSerializer(serializers.Serializer):
     next = serializers.CharField(allow_null=True)
     previous = serializers.CharField(allow_null=True)
     results = UserSubscriptionSerializer(many=True)
+
+
+class PurchaseVerificationItemSerializer(serializers.Serializer):
+    platform = serializers.ChoiceField(choices=PaymentMediumChoices.choices)
+    product_id = serializers.CharField(max_length=150)
+    verification_data = serializers.CharField(trim_whitespace=False)
+    transaction_id = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    source = serializers.ChoiceField(choices=("purchase", "restore", "replay"), default="purchase")
+
+
+class PurchaseSyncSerializer(serializers.Serializer):
+    platform = serializers.ChoiceField(choices=PaymentMediumChoices.choices)
+    source = serializers.ChoiceField(choices=("restore", "replay"), default="restore")
+    purchases = PurchaseVerificationItemSerializer(many=True)
+
+    def validate_purchases(self, value):
+        if len(value) > 50:
+            raise serializers.ValidationError("At most 50 purchases can be synchronized at once.")
+        return value
+
+
+class PurchaseVerificationDataSerializer(serializers.Serializer):
+    state = serializers.CharField()
+    kind = serializers.CharField()
+    credits_granted = serializers.IntegerField()
+    finish_transaction = serializers.BooleanField()
+    store_finalized = serializers.BooleanField()
+    wallet = serializers.JSONField()
+    subscription = serializers.JSONField()
+
+
+class PurchaseVerificationResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    code = serializers.CharField()
+    message = serializers.CharField()
+    data = PurchaseVerificationDataSerializer()
 
 
 class AdminMetricSerializer(serializers.Serializer):

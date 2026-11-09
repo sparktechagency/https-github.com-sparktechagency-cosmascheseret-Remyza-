@@ -11,6 +11,41 @@ class StoreEnvironmentChoices(models.TextChoices):
     SANDBOX = "sandbox", "Sandbox"
 
 
+class StoreProductKind(models.TextChoices):
+    SUBSCRIPTION = "subscription", "Subscription"
+    CREDIT_PACK = "credit_pack", "Credit pack"
+    SETUP_FEE = "setup_fee", "Setup fee"
+
+
+class EntitlementState(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACTIVE = "active", "Active"
+    GRACE_PERIOD = "grace_period", "Grace period"
+    BILLING_RETRY = "billing_retry", "Billing retry"
+    ON_HOLD = "on_hold", "On hold"
+    PAUSED = "paused", "Paused"
+    CANCELED = "canceled", "Canceled"
+    EXPIRED = "expired", "Expired"
+    REVOKED = "revoked", "Revoked"
+    SUPERSEDED = "superseded", "Superseded"
+
+
+class StoreTransactionState(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PENDING_CLAIM = "pending_claim", "Pending claim"
+    GRANTED = "granted", "Granted"
+    REJECTED = "rejected", "Rejected"
+    REFUNDED = "refunded", "Refunded"
+    REVOKED = "revoked", "Revoked"
+
+
+class StoreNotificationStatus(models.TextChoices):
+    RECEIVED = "received", "Received"
+    PROCESSED = "processed", "Processed"
+    FAILED = "failed", "Failed"
+    IGNORED = "ignored", "Ignored"
+
+
 class PlanType(models.TextChoices):
     FREE_TRAIL = "free_trial", "Free Trail"
     PAID = "paid", "Paid"

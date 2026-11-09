@@ -1,4 +1,6 @@
 from datetime import timedelta
+from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
@@ -12,9 +14,11 @@ from crm.models import Lead
 from business.models import Organization
 from sentdm.choices import SentDMMessageDirection
 from sentdm.models import SentDMMessage
-from .models import UserSubscription
+from .models import BillingPlan, StoreProduct, StoreTransaction, UserSubscription
 from .serializers import UserSubscriptionSerializer
 from .services.purchase import SubscriptionValidationService
+from .services.store_types import VerifiedStorePurchase
+from .services.verification import verify_purchase
 from .views import (
     AdminMonthlyRevenueAPIView,
     AdminRevenueAnalyticsAPIView,
@@ -85,6 +89,7 @@ class SubscriptionValidationServiceTests(TestCase):
             start_date=timezone.now(),
             expiry_date=timezone.now() + timedelta(days=30),
             expires_at=timezone.now() + timedelta(days=30),
+            verified_at=timezone.now(),
         )
 
         self.assertEqual(SubscriptionValidationService.get_current_subscription(self.user), subscription)
@@ -100,10 +105,93 @@ class SubscriptionValidationServiceTests(TestCase):
             start_date=timezone.now() - timedelta(days=60),
             expiry_date=timezone.now() - timedelta(days=1),
             expires_at=timezone.now() - timedelta(days=1),
+            verified_at=timezone.now(),
         )
 
         self.assertIsNone(SubscriptionValidationService.get_current_subscription(self.user))
         self.assertFalse(SubscriptionValidationService.has_active_subscription(self.user))
+
+
+class StorePurchaseVerificationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create(phone_number="+15550009991", email="buyer@example.com")
+        self.plan = BillingPlan.objects.create(
+            code="chesera_pro_test", name="Chesera Pro", monthly_credits=1000,
+            dedicated_numbers=1, reference_price_usd="99.00",
+            features=["whatsapp_enabled"],
+        )
+        self.subscription_product = StoreProduct.objects.create(
+            code="chesera_pro_monthly_test", kind="subscription", plan=self.plan,
+            google_product_id="chesera_pro_monthly_test", google_base_plan_id="monthly",
+            reference_price_usd="99.00",
+        )
+
+    def google_subscription(self):
+        now = timezone.now()
+        return VerifiedStorePurchase(
+            platform="google", product_id=self.subscription_product.google_product_id,
+            transaction_id="GPA.test-period-1", original_transaction_id="GPA.test-period-1",
+            purchase_token="google-token-1",
+            app_account_token=str(self.user.credit_account.billing_account_token),
+            purchase_date=now, period_start=now, period_end=now + timedelta(days=30),
+            price_amount=None, currency="USD", raw={"verified": True},
+        )
+
+    @patch("subscription.services.verification.finalize_google_purchase", return_value=True)
+    @patch("subscription.services.verification.verify_google_purchase")
+    def test_verified_subscription_locks_price_and_allowance_and_grants_once(self, mocked_verify, _mocked_finalize):
+        from credits.services.wallet import get_credit_account
+
+        account = get_credit_account(self.user)
+        mocked_verify.return_value = self.google_subscription()
+        first = verify_purchase(
+            user=self.user, platform="google", product_id=self.subscription_product.google_product_id,
+            verification_data="google-token-1", transaction_id="", source="purchase",
+        )
+        second = verify_purchase(
+            user=self.user, platform="google", product_id=self.subscription_product.google_product_id,
+            verification_data="google-token-1", transaction_id="", source="replay",
+        )
+        subscription = UserSubscription.objects.get(user=self.user)
+        account.refresh_from_db()
+
+        self.assertEqual(first["state"], "granted")
+        self.assertEqual(second["state"], "already_granted")
+        self.assertEqual(subscription.locked_price, Decimal("99.00"))
+        self.assertEqual(subscription.locked_monthly_credits, 1000)
+        self.assertEqual(account.balance, 1000)
+
+        self.plan.monthly_credits = 800
+        self.plan.reference_price_usd = "129.00"
+        self.plan.save()
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.locked_monthly_credits, 1000)
+        self.assertEqual(str(subscription.locked_price), "99.00")
+
+    @patch("subscription.services.verification.finalize_google_purchase", return_value=True)
+    @patch("subscription.services.verification.verify_google_purchase")
+    def test_verified_topup_creates_non_expiring_purchased_bucket(self, mocked_verify, _mocked_finalize):
+        from credits.models import CreditBucket
+        from credits.services.wallet import get_credit_account
+
+        product = StoreProduct.objects.create(
+            code="credits_250_test", kind="credit_pack", google_product_id="credits_250_test",
+            credits=250, reference_price_usd="15.00",
+        )
+        account = get_credit_account(self.user)
+        mocked_verify.return_value = VerifiedStorePurchase(
+            platform="google", product_id=product.google_product_id,
+            transaction_id="GPA.topup-1", purchase_token="topup-token",
+            app_account_token=str(account.billing_account_token), purchase_date=timezone.now(),
+        )
+        result = verify_purchase(
+            user=self.user, platform="google", product_id=product.google_product_id,
+            verification_data="topup-token", source="purchase",
+        )
+        bucket = CreditBucket.objects.get(account=account, source="topup")
+        self.assertEqual(result["credits_granted"], 250)
+        self.assertEqual(bucket.remaining, 250)
+        self.assertIsNone(bucket.expires_at)
 class UserSubscriptionViewSetTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -151,7 +239,7 @@ class UserSubscriptionViewSetTests(TestCase):
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(len(response.data["results"]), 2)
 
-    def test_create_subscription_payment_record(self):
+    def test_client_cannot_create_unverified_subscription_record(self):
         request = self.factory.post(
             "/api/v1/user-subscription/",
             {
@@ -167,9 +255,11 @@ class UserSubscriptionViewSetTests(TestCase):
 
         response = UserSubscriptionViewSet.as_view({"post": "create"})(request)
 
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["user"], self.client_user.id)
-        self.assertTrue(response.data["is_active"])
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.data["code"], "endpoint_removed")
+        self.assertFalse(
+            UserSubscription.objects.filter(user=self.client_user, purchase_token="new-token").exists()
+        )
 
 
 class AdminSubscriptionAnalyticsAPIViewTests(TestCase):
@@ -210,6 +300,9 @@ class AdminSubscriptionAnalyticsAPIViewTests(TestCase):
             expires_at=now + timedelta(days=30),
             amount="79.00",
             currency_code="USD",
+            verified_at=now,
+            entitlement_state="active",
+            current_period_end=now + timedelta(days=30),
         )
         UserSubscription.objects.create(
             user=self.active_user,
@@ -223,6 +316,30 @@ class AdminSubscriptionAnalyticsAPIViewTests(TestCase):
             expires_at=now - timedelta(days=5),
             amount="79.00",
             currency_code="USD",
+        )
+        StoreTransaction.objects.create(
+            platform="apple",
+            kind="subscription",
+            product_id="chesera.pro.monthly",
+            user=self.active_user,
+            subscription=self.active_subscription,
+            transaction_id="store-current-admin-analytics",
+            transaction_state="granted",
+            purchase_date=now,
+            price_amount="79.00",
+            currency="USD",
+        )
+        StoreTransaction.objects.create(
+            platform="apple",
+            kind="subscription",
+            product_id="chesera.pro.monthly",
+            user=self.active_user,
+            subscription=self.active_subscription,
+            transaction_id="store-previous-admin-analytics",
+            transaction_state="granted",
+            purchase_date=now - timedelta(days=35),
+            price_amount="79.00",
+            currency="USD",
         )
         UserSubscription.objects.create(
             user=self.trial_user,

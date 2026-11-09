@@ -453,6 +453,7 @@ class CurrentUserDataSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
     active_subscription = CurrentUserSubscriptionSummarySerializer(required=False, allow_null=True)
     free_trial_number = CurrentUserFreeTrialNumberSerializer(required=False, allow_null=True)
+    billing = serializers.JSONField(required=False)
 
 
 class CurrentUserResponseSerializer(serializers.Serializer):
@@ -561,6 +562,7 @@ class UserPlanAndProgressDataSerializer(serializers.Serializer):
     whatsapp = UserPlanWhatsAppStatusSerializer()
     messaging_activation = UserMessagingActivationSerializer()
     progress = UserPlanProgressSummarySerializer()
+    billing = serializers.JSONField(required=False)
 
 
 class CurrentUserPlanAndProgressResponseSerializer(serializers.Serializer):

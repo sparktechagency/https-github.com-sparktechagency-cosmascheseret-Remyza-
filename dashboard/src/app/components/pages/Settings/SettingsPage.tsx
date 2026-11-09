@@ -8,6 +8,7 @@ import AdminProfile from "./SettingTab/AdminProfile";
 import FaqSettings from "./SettingTab/FaqSettings";
 import PrivacyPolicySettings from "./SettingTab/PrivacyPolicySettings";
 import TermsOfServiceSettings from "./SettingTab/TermsOfServiceSettings";
+import BillingCreditsSettings from "./SettingTab/BillingCreditsSettings";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState("General");
@@ -26,6 +27,8 @@ export default function Settings() {
         return <PrivacyPolicySettings />;
       case "Terms of Service":
         return <TermsOfServiceSettings />;
+      case "Billing & Credits":
+        return <BillingCreditsSettings />;
 
       default:
         return <GeneralSettings />;

@@ -8,6 +8,8 @@ from .views import (
     AdminSubscriberListAPIView,
     AdminUserAnalyticsAPIView,
     UserSubscriptionViewSet,
+    PurchaseSyncAPIView,
+    PurchaseVerificationAPIView,
 )
 
 
@@ -15,6 +17,8 @@ router = DefaultRouter()
 router.register("user-subscription", UserSubscriptionViewSet, basename="user-subscription")
 
 urlpatterns = [
+    path("billing/purchases/verify/", PurchaseVerificationAPIView.as_view(), name="billing-purchase-verify"),
+    path("billing/purchases/sync/", PurchaseSyncAPIView.as_view(), name="billing-purchase-sync"),
     path("admin/subscriptions/", AdminSubscriberListAPIView.as_view(), name="admin-subscriber-list"),
     path("admin/subscriptions/<int:user_id>/", AdminSubscriberDetailAPIView.as_view(), name="admin-subscriber-detail"),
     path("admin/revenue/monthly/", AdminMonthlyRevenueAPIView.as_view(), name="admin-monthly-revenue"),

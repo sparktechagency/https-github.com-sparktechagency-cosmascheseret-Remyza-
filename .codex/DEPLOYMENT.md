@@ -770,3 +770,56 @@ sudo tail -f /var/log/nginx/chesera_admin_error.log
 ```
 
 If Nginx returns `502`, first confirm `cheshara_dashboard` is healthy and `curl -I http://127.0.0.1:3000/login` works.
+
+## 17. APPLE/GOOGLE BILLING SECRETS
+
+The billing code is deployed safely in `shadow` credit mode by default. Do not switch to live enforcement until store products, credentials, and purchase verification have been tested.
+
+Create the server-only secret directory used by production Compose:
+
+```bash
+mkdir -p ~/app/secrets
+chmod 700 ~/app/secrets
+```
+
+Place these files there when the store accounts are ready:
+
+```text
+~/app/secrets/apple_iap_private_key.p8
+~/app/secrets/AppleRootCA-G3.cer
+~/app/secrets/google-play-service-account.json
+```
+
+Protect them:
+
+```bash
+chmod 600 ~/app/secrets/*
+```
+
+Add the non-secret identifiers and mounted file paths to the existing `~/app/.env`:
+
+```text
+APPLE_IAP_BUNDLE_ID=com.chesera.app
+APPLE_IAP_APP_ID=NUMERIC_APP_STORE_ID
+APPLE_IAP_KEY_ID=APP_STORE_IAP_KEY_ID
+APPLE_IAP_ISSUER_ID=APP_STORE_CONNECT_ISSUER_ID
+APPLE_IAP_PRIVATE_KEY_PATH=/run/secrets/apple_iap_private_key.p8
+APPLE_ROOT_CA_PATHS=/run/secrets/AppleRootCA-G3.cer
+
+GOOGLE_PLAY_PACKAGE_NAME=com.chesera.app
+GOOGLE_PLAY_SERVICE_ACCOUNT_FILE=/run/secrets/google-play-service-account.json
+
+OPENAI_REPLY_MODEL=gpt-4o-mini
+OPENAI_SUMMARY_MODEL=gpt-4o
+```
+
+After deployment, confirm migrations and the seeded catalog:
+
+```bash
+cd ~/app
+docker compose -f docker-compose.prod.yml exec backend python manage.py migrate
+docker compose -f docker-compose.prod.yml exec backend python manage.py check
+docker compose -f docker-compose.prod.yml exec backend python manage.py shell -c "from subscription.models import StoreProduct; print(list(StoreProduct.objects.values_list('code', flat=True)))"
+```
+
+Keep `CreditSettings.enforcement_mode=shadow` during the first production metering period. Switch it to `enforce` from the admin Billing & Credits page only after balances and channel charges have been reviewed.

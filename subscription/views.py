@@ -8,9 +8,11 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins
+from rest_framework import status as drf_status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
@@ -21,7 +23,8 @@ from crm.choices import LeadStage
 from crm.models import Lead
 from sentdm.choices import SentDMMessageDirection
 from sentdm.models import SentDMMessage
-from .models import UserSubscription
+from .choices import EntitlementState, StoreTransactionState
+from .models import StoreTransaction, UserSubscription
 from .serializers import (
     AdminMonthlyRevenueResponseSerializer,
     AdminRevenueAnalyticsResponseSerializer,
@@ -30,7 +33,100 @@ from .serializers import (
     AdminUserAnalyticsResponseSerializer,
     UserSubscriptionListResponseSerializer,
     UserSubscriptionSerializer,
+    PurchaseSyncSerializer,
+    PurchaseVerificationItemSerializer,
+    PurchaseVerificationResponseSerializer,
 )
+from .services.store_types import StoreVerificationError
+from .services.verification import verify_purchase
+
+
+class PurchaseVerificationThrottle(UserRateThrottle):
+    rate = "30/min"
+
+
+def _purchase_result_payload(result):
+    from credits.views import subscription_data, wallet_data
+
+    owner = result.pop("owner")
+    return {
+        **result,
+        "wallet": wallet_data(owner),
+        "subscription": subscription_data(owner),
+    }
+
+
+class PurchaseVerificationAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PurchaseVerificationThrottle]
+    serializer_class = PurchaseVerificationItemSerializer
+
+    @extend_schema(
+        tags=["Billing - User"],
+        summary="Verify an Apple or Google Play purchase",
+        request=PurchaseVerificationItemSerializer,
+        responses={200: PurchaseVerificationResponseSerializer, 202: PurchaseVerificationResponseSerializer},
+    )
+    def post(self, request):
+        serializer = PurchaseVerificationItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = verify_purchase(user=request.user, **serializer.validated_data)
+        except StoreVerificationError as exc:
+            return Response(
+                {
+                    "success": False,
+                    "code": exc.code,
+                    "message": exc.message,
+                    "data": {"finish_transaction": exc.finish_transaction},
+                },
+                status=exc.http_status,
+            )
+        payload = _purchase_result_payload(result)
+        response_status = drf_status.HTTP_202_ACCEPTED if payload["state"] == "purchase_pending" else drf_status.HTTP_200_OK
+        return Response(
+            {
+                "success": True,
+                "code": payload["state"],
+                "message": "Purchase verified.",
+                "data": payload,
+            },
+            status=response_status,
+        )
+
+
+class PurchaseSyncAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [PurchaseVerificationThrottle]
+    serializer_class = PurchaseSyncSerializer
+
+    @extend_schema(tags=["Billing - User"], summary="Restore or replay store purchases", request=PurchaseSyncSerializer)
+    def post(self, request):
+        serializer = PurchaseSyncSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        results = []
+        platform = serializer.validated_data["platform"]
+        source = serializer.validated_data["source"]
+        for item in serializer.validated_data["purchases"]:
+            item = {**item, "platform": platform, "source": source}
+            try:
+                result = verify_purchase(user=request.user, **item)
+                results.append({"success": True, "code": result["state"], "data": {k: v for k, v in result.items() if k != "owner"}})
+            except StoreVerificationError as exc:
+                results.append({
+                    "success": False, "code": exc.code, "message": exc.message,
+                    "data": {"finish_transaction": exc.finish_transaction},
+                })
+        from credits.views import subscription_data, wallet_data
+
+        return Response({
+            "success": True,
+            "data": {
+                "results": results,
+                "wallet": wallet_data(request.user),
+                "subscription": subscription_data(request.user),
+            },
+        })
 
 
 class UserSubscriptionPagination(PageNumberPagination):
@@ -51,11 +147,13 @@ class AdminSubscriptionAnalyticsMixin:
     def active_subscription_filter(self, now=None):
         now = now or timezone.now()
         return (
-            Q(is_subscription_active=True)
-            & (Q(expiry_date__isnull=True) | Q(expiry_date__gt=now))
-        ) | (
-            Q(status="active")
-            & (Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+            Q(verified_at__isnull=False)
+            & Q(entitlement_state__in=(EntitlementState.ACTIVE, EntitlementState.GRACE_PERIOD, EntitlementState.CANCELED))
+            & (
+                Q(current_period_end__gt=now)
+                | Q(grace_period_expires_at__gt=now)
+                | Q(current_period_end__isnull=True, expiry_date__gt=now)
+            )
         )
 
     def paid_subscription_filter(self, now=None):
@@ -80,13 +178,17 @@ class AdminSubscriptionAnalyticsMixin:
             return 100.0 if current > 0 else 0.0
         return round(float(((current - previous) / previous) * Decimal("100")), 2)
 
-    def money_sum(self, queryset):
+    def money_sum(self, queryset, field="price_amount"):
         return queryset.aggregate(
-            total=Coalesce(Sum("amount"), Decimal("0.00"), output_field=DecimalField(max_digits=12, decimal_places=2))
+            total=Coalesce(Sum(field), Decimal("0.00"), output_field=DecimalField(max_digits=12, decimal_places=2))
         )["total"] or Decimal("0.00")
 
     def revenue_queryset(self):
-        return UserSubscription.objects.filter(amount__isnull=False)
+        return StoreTransaction.objects.filter(
+            transaction_state=StoreTransactionState.GRANTED,
+            is_test=False,
+            price_amount__isnull=False,
+        )
 
     def get_revenue_for_range(self, start=None, end=None):
         queryset = self.revenue_queryset()
@@ -175,11 +277,14 @@ class AdminSubscriptionAnalyticsMixin:
             return "Free"
         plan = self.get_user_plan(subscription)
         if plan == "trial":
-            return "14 days free"
-        amount = subscription.amount
-        currency = subscription.currency_code or self.default_currency
+            return "Starter credits"
+        amount = subscription.locked_price or subscription.amount
+        currency = subscription.locked_currency or subscription.currency_code or self.default_currency
         if amount is None:
-            return "$79/month" if plan == "pro" else "Free"
+            if plan == "pro" and subscription.store_product:
+                amount = subscription.store_product.reference_price_usd
+            else:
+                return "Free"
         symbol = "$" if currency.upper() == "USD" else f"{currency.upper()} "
         return f"{symbol}{amount}/month"
 
@@ -190,7 +295,7 @@ class AdminSubscriptionAnalyticsMixin:
         return request.build_absolute_uri(url) if request else url
 
     def get_lifetime_spent(self, user):
-        return self.money_sum(UserSubscription.objects.filter(user=user, amount__isnull=False))
+        return self.money_sum(self.revenue_queryset().filter(user=user))
 
     def serialize_subscriber(self, user, request, include_detail=False):
         subscription = self.get_latest_subscription(user)
@@ -412,6 +517,16 @@ class UserSubscriptionViewSet(
 
     def perform_create(self, serializer):
         serializer.save()
+
+    def create(self, request, *args, **kwargs):
+        return Response(
+            {
+                "success": False,
+                "code": "endpoint_removed",
+                "message": "Client-submitted subscription records are no longer accepted. Verify purchases through the billing purchase endpoint.",
+            },
+            status=drf_status.HTTP_410_GONE,
+        )
 
 
 class AdminSubscriberListAPIView(AdminSubscriptionAnalyticsMixin, APIView):

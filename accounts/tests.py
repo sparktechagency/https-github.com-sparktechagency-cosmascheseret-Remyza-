@@ -615,6 +615,12 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
     def complete_sentdm_compliance(self):
         self.organization.sentdm_legal_name = "Progress Realty LLC"
         self.organization.sentdm_tax_id = "12-3456789"
+        self.organization.sentdm_tax_id_type = "EIN"
+        self.organization.sentdm_entity_type = "PRIVATE_PROFIT"
+        self.organization.sentdm_brand_street = "123 Main Street"
+        self.organization.sentdm_brand_city = "Austin"
+        self.organization.sentdm_brand_state = "TX"
+        self.organization.sentdm_brand_postal_code = "78701"
         self.organization.sentdm_vertical = "REAL_ESTATE"
         self.organization.sentdm_authorized_rep_name = "Progress Agent"
         self.organization.sentdm_authorized_rep_title = "Owner"
@@ -626,6 +632,9 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
         self.organization.sentdm_terms_url = "https://progressrealty.example/terms"
         self.organization.sentdm_opt_in_url = "https://progressrealty.example/contact"
         self.organization.sentdm_opt_in_description = "Leads submit the website contact form and agree to receive replies about their inquiry."
+        self.organization.sentdm_opt_in_method = "subscriber_initiated"
+        self.organization.sentdm_sms_disclaimer_text = "Progress Realty: Message and data rates may apply. Message frequency varies. Reply HELP for help or STOP to opt out."
+        self.organization.sentdm_privacy_policy_no_mobile_sharing = True
         self.organization.sentdm_messaging_use_case = "Customer care replies for opted-in real estate leads."
         self.organization.sentdm_messaging_use_case_us = "CUSTOMER_CARE"
         self.organization.sentdm_sample_message_1 = "Hi Alex! This is the assistant for Progress Realty. Thanks for reaching out about your home search. Reply STOP to opt out."
@@ -646,6 +655,7 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
             medium="apple",
             transaction_id="txn_progress",
             is_subscription_active=True,
+            verified_at=timezone.now(),
             start_date=timezone.now(),
             expiry_date=timezone.now() + timedelta(days=30),
             expires_at=timezone.now() + timedelta(days=30),
@@ -688,6 +698,7 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
             medium="apple",
             transaction_id="txn_progress_pending_number",
             is_subscription_active=True,
+            verified_at=timezone.now(),
             start_date=timezone.now(),
             expiry_date=timezone.now() + timedelta(days=30),
             expires_at=timezone.now() + timedelta(days=30),
@@ -728,6 +739,7 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
             medium="apple",
             transaction_id="txn_progress_active",
             is_subscription_active=True,
+            verified_at=timezone.now(),
             start_date=timezone.now(),
             expiry_date=timezone.now() + timedelta(days=30),
             expires_at=timezone.now() + timedelta(days=30),
@@ -745,6 +757,12 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
         self.organization.sentdm_legal_name = "Progress Realty LLC"
         self.organization.sentdm_tax_id = "12-3456789"
         self.organization.sentdm_vertical = "REAL_ESTATE"
+        self.organization.sentdm_tax_id_type = "EIN"
+        self.organization.sentdm_entity_type = "PRIVATE_PROFIT"
+        self.organization.sentdm_brand_street = "123 Main Street"
+        self.organization.sentdm_brand_city = "Austin"
+        self.organization.sentdm_brand_state = "TX"
+        self.organization.sentdm_brand_postal_code = "78701"
         self.organization.sentdm_authorized_rep_name = "Progress Agent"
         self.organization.sentdm_authorized_rep_title = "Owner"
         self.organization.sentdm_authorized_rep_email = "owner@progressrealty.example"
@@ -756,6 +774,9 @@ class CurrentUserPlanAndProgressAPIViewTests(TestCase):
         self.organization.sentdm_opt_in_url = "https://progressrealty.example/contact"
         self.organization.sentdm_opt_in_description = "Leads submit the website contact form and agree to receive replies about their inquiry."
         self.organization.sentdm_messaging_use_case = "Customer care replies for opted-in real estate leads."
+        self.organization.sentdm_opt_in_method = "subscriber_initiated"
+        self.organization.sentdm_sms_disclaimer_text = "Progress Realty: Message and data rates may apply. Message frequency varies. Reply HELP for help or STOP to opt out."
+        self.organization.sentdm_privacy_policy_no_mobile_sharing = True
         self.organization.sentdm_messaging_use_case_us = "CUSTOMER_CARE"
         self.organization.sentdm_sample_message_1 = "Hi Alex! This is the assistant for Progress Realty. Thanks for reaching out about your home search. Reply STOP to opt out."
         self.organization.sentdm_sample_message_2 = "Progress Realty: We received your property question and can help with next steps. Reply STOP to opt out."
@@ -829,6 +850,7 @@ class AdminUserManagementAPIViewTests(TestCase):
             medium="apple",
             transaction_id="txn-admin-user-list",
             is_subscription_active=True,
+            verified_at=timezone.now(),
             expiry_date=timezone.now() + timedelta(days=30),
         )
         Lead.objects.create(

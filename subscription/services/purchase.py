@@ -1,6 +1,7 @@
 from django.db.models import Q
 from django.utils import timezone
 
+from credits.models import CreditSettings
 from subscription.models import UserSubscription
 
 
@@ -12,14 +13,26 @@ class SubscriptionValidationService:
     @classmethod
     def get_current_subscription(cls, user):
         now = timezone.now()
-        return (
+        candidates = (
             UserSubscription.objects
-            .select_related("user", "organization")
-            .filter(user=user, is_subscription_active=True)
-            .filter(Q(expiry_date__isnull=True) | Q(expiry_date__gt=now))
-            .order_by("-expiry_date", "-created_at")
-            .first()
+            .select_related("user", "organization", "store_product", "store_product__plan")
+            .filter(user=user)
+            .order_by("-current_period_end", "-expiry_date", "-created_at")
         )
+        settings_obj = CreditSettings.get_solo()
+        allowlisted = {
+            int(item) for item in settings_obj.sandbox_allowlist_user_ids if str(item).isdigit()
+        }
+        for subscription in candidates:
+            if not subscription.is_active:
+                continue
+            if subscription.is_test:
+                if settings_obj.sandbox_purchase_policy == "reject":
+                    continue
+                if settings_obj.sandbox_purchase_policy == "allowlist" and user.id not in allowlisted:
+                    continue
+            return subscription
+        return None
 
     @staticmethod
     def get_active_subscription(user):

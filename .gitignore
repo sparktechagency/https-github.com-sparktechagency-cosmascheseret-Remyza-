@@ -200,3 +200,5 @@ temp_interactive_push.bat
 .gitignore
 docs/
 .vscode
+.secrets/
+secrets/

@@ -23,6 +23,10 @@ services:
     env_file:
       - path: .env
         format: raw
+    volumes:
+      - ./secrets:/run/secrets:ro
+    volumes:
+      - ./secrets:/run/secrets:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -47,12 +51,16 @@ services:
     env_file:
       - path: .env
         format: raw
+    volumes:
+      - ./secrets:/run/secrets:ro
+    volumes:
+      - ./secrets:/run/secrets:ro
     depends_on:
       redis:
         condition: service_healthy
       backend:
         condition: service_started
-    command: celery -A cheshara_config worker --loglevel=info --queues=sentdm,celery
+    command: celery -A cheshara_config worker --loglevel=info --queues=sentdm,billing,celery
     logging:
       driver: "json-file"
       options:
@@ -66,6 +74,10 @@ services:
     env_file:
       - path: .env
         format: raw
+    volumes:
+      - ./secrets:/run/secrets:ro
+    volumes:
+      - ./secrets:/run/secrets:ro
     depends_on:
       redis:
         condition: service_healthy

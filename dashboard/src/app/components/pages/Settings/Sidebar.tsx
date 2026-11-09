@@ -5,6 +5,7 @@ import {
   HelpCircle,
   EyeOff,
   FileText,
+  CreditCard,
 } from "lucide-react"; // Elegant modern icons matching your design
 
 export default function Sidebar({
@@ -16,6 +17,7 @@ export default function Sidebar({
 }) {
   const menuItems = [
     { id: "General", label: "General", icon: Settings },
+    { id: "Billing & Credits", label: "Billing & Credits", icon: CreditCard },
     { id: "Admin Profile", label: "Admin Profile", icon: User },
     { id: "Security", label: "Security", icon: Shield },
     { id: "FAQ's", label: "FAQ's", icon: HelpCircle },

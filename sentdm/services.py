@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from datetime import timedelta
 
 from django.conf import settings
@@ -20,6 +21,10 @@ from communications.choices import MessageTemplateType
 from communications.models import Conversation, Message, StaticMessageTemplate
 from crm.choices import AutomatedFollowUpStatus, LeadActivityType, LeadSource, LeadStage
 from crm.models import AutomatedFollowUp, Contact, FollowUpReminder, Lead, LeadActivity
+from credits.choices import CreditPurpose, EnforcementMode, UsageType
+from credits.models import CreditSettings, WhatsAppConversationWindow
+from credits.services.pricing import estimate_message_cost
+from credits.services.wallet import InsufficientCredits, charge_inbound, get_credit_account, release_reservation, reserve_credits, settle_reservation
 
 from .choices import SentDMChannel, SentDMCampaignStatus, SentDMMessageDirection, SentDMMessageStatus, SentDMProfileStatus, SentDMWebhookEventStatus, SentDMWhatsAppConnectionSource, SentDMWhatsAppConnectionStatus
 from .client import SentDMClient, SentDMClientError
@@ -960,20 +965,56 @@ def schedule_automated_follow_ups_for_lead(lead, requested_channel="sms", base_t
     return created_followups
 
 
-def send_sentdm_message(*, user, to, text, profile=None, channel="auto", idempotency_prefix="message", purpose="direct", lead=None):
+def send_sentdm_message(
+    *, user, to, text, profile=None, channel="auto", idempotency_prefix="message",
+    purpose="direct", lead=None, idempotency_key=None
+):
     channel = resolve_outbound_channel(profile=profile, requested_channel=channel, purpose=purpose, lead=lead)
-    client = SentDMClient()
-    response = client.send_message(
-        to=to,
-        text=text,
-        profile_id=profile.profile_id if profile else None,
+    account = get_credit_account(user)
+    request_key = idempotency_key or str(uuid.uuid4())
+    provider_key = f"chesera-{idempotency_prefix}-{user.id}-{request_key}"[:200]
+    estimate = estimate_message_cost(text=text, channel=channel, account=account, to=to)
+    usage_type = {
+        SentDMChannel.WHATSAPP: UsageType.WHATSAPP_OUTBOUND,
+    }.get(channel, UsageType.SMS_OUTBOUND)
+    reservation = reserve_credits(
+        account,
+        estimate["credits"],
+        key=f"send:{account.id}:{request_key}",
+        usage_type=usage_type,
+        purpose=purpose if purpose in CreditPurpose.values else CreditPurpose.DIRECT,
         channel=channel,
-        idempotency_key=f"chesera-{idempotency_prefix}-{user.id}-{int(time.time())}",
+        direction="outbound",
+        units=estimate["segments"],
+        unit_rate=(estimate["credits"] // estimate["segments"]) if estimate["segments"] else 0,
+        counterparty=to,
+        organization=profile.organization if profile else getattr(user, "organization", None),
+        lead=lead,
+        sandbox=getattr(settings, "SENTDM_SANDBOX_MODE", True),
+        metadata={"encoding": estimate["encoding"], "segments": estimate["segments"]},
     )
+    if reservation.reference_type == "sentdm_message" and reservation.reference_id:
+        existing_message = SentDMMessage.objects.filter(pk=reservation.reference_id).first()
+        if existing_message:
+            return existing_message, existing_message.raw_response
+    client = SentDMClient()
+    try:
+        response = client.send_message(
+            to=to,
+            text=text,
+            profile_id=profile.profile_id if profile else None,
+            channel=channel,
+            idempotency_key=provider_key,
+        )
+    except Exception:
+        release_reservation(reservation, reason="sentdm_send_failed")
+        raise
+    settle_reservation(reservation)
 
     message = SentDMMessage.objects.create(
         organization=profile.organization if profile else getattr(user, "organization", None),
         profile=profile,
+        lead=lead,
         sent_message_id=extract_first_message_id(response),
         direction=SentDMMessageDirection.OUTBOUND,
         channel=channel,
@@ -983,10 +1024,25 @@ def send_sentdm_message(*, user, to, text, profile=None, channel="auto", idempot
         sandbox=getattr(settings, "SENTDM_SANDBOX_MODE", True),
         raw_response=response,
     )
+    reservation.reference_type = "sentdm_message"
+    reservation.reference_id = str(message.id)
+    reservation.metadata = {**reservation.metadata, "sentdm_message_id": message.sent_message_id}
+    reservation.save(update_fields=["reference_type", "reference_id", "metadata", "updated_at"])
+    if channel == SentDMChannel.WHATSAPP and not estimate["whatsapp_window_open"]:
+        WhatsAppConversationWindow.objects.create(
+            account=account,
+            organization=message.organization,
+            lead=lead,
+            contact_e164=to,
+            opened_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(hours=CreditSettings.get_solo().whatsapp_window_hours),
+            opened_by="business",
+            charge_transaction=reservation,
+        )
     return message, response
 
 
-def send_sandbox_message(*, user, to, text, profile=None, channel="auto", purpose="direct", lead=None):
+def send_sandbox_message(*, user, to, text, profile=None, channel="auto", purpose="direct", lead=None, idempotency_key=None):
     return send_sentdm_message(
         user=user,
         to=to,
@@ -996,10 +1052,11 @@ def send_sandbox_message(*, user, to, text, profile=None, channel="auto", purpos
         idempotency_prefix="sandbox-message",
         purpose=purpose,
         lead=lead,
+        idempotency_key=idempotency_key,
     )
 
 
-def send_live_message(*, user, to, text, profile=None, channel="auto", purpose="direct", lead=None):
+def send_live_message(*, user, to, text, profile=None, channel="auto", purpose="direct", lead=None, idempotency_key=None):
     return send_sentdm_message(
         user=user,
         to=to,
@@ -1009,6 +1066,7 @@ def send_live_message(*, user, to, text, profile=None, channel="auto", purpose="
         idempotency_prefix="live-message",
         purpose=purpose,
         lead=lead,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -1065,6 +1123,8 @@ def send_automated_follow_up(followup):
     if not conversation:
         return fail_automated_follow_up(followup, "No active conversation found for this lead.")
 
+    followup.follow_up_status = AutomatedFollowUpStatus.SENDING
+    followup.save(update_fields=["follow_up_status", "updated_at"])
     try:
         channel = resolve_outbound_channel(
             profile=profile,
@@ -1073,36 +1133,38 @@ def send_automated_follow_up(followup):
             lead=lead,
         )
         text = render_automated_follow_up_message(followup)
-        response = SentDMClient().send_message(
+        sentdm_message, response = send_sentdm_message(
+            user=followup.organization.owner,
             to=lead.contact_number,
             text=text,
-            profile_id=profile.profile_id,
+            profile=profile,
             channel=channel,
-            idempotency_key=f"chesera-followup-{followup.id}",
+            idempotency_prefix="followup",
+            purpose=CreditPurpose.FOLLOW_UP,
+            lead=lead,
+            idempotency_key=f"followup-{followup.id}",
         )
+    except InsufficientCredits:
+        followup.follow_up_status = AutomatedFollowUpStatus.PAUSED
+        followup.paused_at = timezone.now()
+        followup.pause_reason = "no_credits"
+        followup.error_message = "Paused until credits are available."
+        followup.save(update_fields=["follow_up_status", "paused_at", "pause_reason", "error_message", "updated_at"])
+        from notifications.services import NotificationTemplates, safe_notify
+        safe_notify(NotificationTemplates.followups_paused, followup.organization.owner, lead, followup)
+        return {"sent": False, "followup_id": followup.id, "reason": "no_credits", "paused": True}
     except (ImproperlyConfigured, SentDMClientError, ValidationError) as exc:
+        followup.follow_up_status = AutomatedFollowUpStatus.SCHEDULED
+        followup.save(update_fields=["follow_up_status", "updated_at"])
         return fail_automated_follow_up(followup, exc)
 
     now = timezone.now()
-    message_id = extract_first_message_id(response) or f"sentdm-followup-{followup.id}"
-    sentdm_status = normalize_message_status(response)
+    message_id = sentdm_message.sent_message_id or f"sentdm-followup-{followup.id}"
+    sentdm_status = sentdm_message.status
     from_number = profile.whatsapp_phone_number if channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number
-
-    SentDMMessage.objects.create(
-        organization=followup.organization,
-        profile=profile,
-        lead=lead,
-        conversation=conversation,
-        sent_message_id=message_id,
-        direction=SentDMMessageDirection.OUTBOUND,
-        channel=channel,
-        from_number=from_number,
-        to_number=lead.contact_number,
-        body=text,
-        status=sentdm_status,
-        sandbox=getattr(settings, "SENTDM_SANDBOX_MODE", True),
-        raw_response=response,
-    )
+    sentdm_message.conversation = conversation
+    sentdm_message.from_number = from_number
+    sentdm_message.save(update_fields=["conversation", "from_number", "updated_at"])
     Message.objects.get_or_create(
         provider_message_sid=message_id,
         defaults={
@@ -1130,6 +1192,8 @@ def send_automated_follow_up(followup):
     followup.message_body = text
     followup.sentdm_message_id = message_id
     followup.sent_at = now
+    followup.paused_at = None
+    followup.pause_reason = ""
     followup.error_message = ""
     followup.save(
         update_fields=[
@@ -1138,6 +1202,8 @@ def send_automated_follow_up(followup):
             "message_body",
             "sentdm_message_id",
             "sent_at",
+            "paused_at",
+            "pause_reason",
             "error_message",
             "updated_at",
         ]
@@ -1419,6 +1485,57 @@ def store_inbound_sentdm_message(event, profile, lead, conversation, details):
     return sentdm_message
 
 
+def charge_inbound_message(event, profile, lead, details):
+    if not profile or not profile.organization or not profile.organization.owner:
+        return None
+    account = get_credit_account(profile.organization.owner)
+    channel = (details.get("channel") or SentDMChannel.SMS).lower()
+    credit_settings = CreditSettings.get_solo()
+    usage_type = UsageType.SMS_INBOUND
+    amount = credit_settings.sms_inbound_per_message
+
+    if channel == SentDMChannel.WHATSAPP:
+        existing_window = WhatsAppConversationWindow.objects.filter(
+            account=account,
+            contact_e164=details.get("from_number", ""),
+            expires_at__gt=timezone.now(),
+        ).first()
+        if existing_window:
+            return existing_window.charge_transaction
+        usage_type = UsageType.WHATSAPP_INBOUND
+        amount = credit_settings.whatsapp_inbound_conversation
+
+    provider_id = details.get("message_id") or event.event_id or str(event.pk)
+    txn = charge_inbound(
+        account,
+        amount,
+        key=f"inbound:{provider_id}",
+        usage_type=usage_type,
+        purpose=CreditPurpose.DIRECT,
+        channel=channel,
+        units=1,
+        unit_rate=amount,
+        counterparty=details.get("from_number", ""),
+        organization=profile.organization,
+        lead=lead,
+        reference_type="sentdm_webhook",
+        reference_id=str(event.pk),
+        sandbox=getattr(settings, "SENTDM_SANDBOX_MODE", True),
+    )
+    if channel == SentDMChannel.WHATSAPP:
+        WhatsAppConversationWindow.objects.create(
+            account=account,
+            organization=profile.organization,
+            lead=lead,
+            contact_e164=details.get("from_number", ""),
+            opened_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(hours=credit_settings.whatsapp_window_hours),
+            opened_by="lead",
+            charge_transaction=txn,
+        )
+    return txn
+
+
 def send_control_autoresponse(profile, lead, conversation, text, channel, kind):
     if not profile or not lead or not text:
         return None
@@ -1499,6 +1616,11 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
     if not lead.ai_enabled or not conversation.ai_enabled:
         return {"sent": False, "reason": "ai_disabled"}
 
+    account = get_credit_account(profile.organization.owner)
+    credit_settings = CreditSettings.get_solo()
+    if credit_settings.enforcement_mode == EnforcementMode.ENFORCE and account.balance <= 0:
+        return {"sent": False, "reason": "insufficient_credits"}
+
     history = conversation.messages.order_by("created_at")
     ai_response = AIService().generate_reply_and_stage(history, organization=profile.organization)
     reply_text = (ai_response.get("reply") or "").strip()
@@ -1511,32 +1633,26 @@ def send_ai_reply_for_inbound(profile, lead, conversation, channel):
         purpose=REPLY_MESSAGE_PURPOSE,
         lead=lead,
     )
-    response = SentDMClient().send_message(
+    try:
+        sentdm_message, response = send_sentdm_message(
+            user=profile.organization.owner,
         to=lead.contact_number,
         text=reply_text,
-        profile_id=profile.profile_id,
-        channel=send_channel,
-        idempotency_key=f"chesera-sentdm-ai-{conversation.id}-{int(time.time())}",
-    )
-    message_id = extract_first_message_id(response) or f"sentdm-ai-{conversation.id}-{int(time.time())}"
-    sentdm_status = normalize_message_status(response)
-    from_number = profile.whatsapp_phone_number if send_channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number
-
-    sentdm_message = SentDMMessage.objects.create(
-        organization=profile.organization,
         profile=profile,
-        lead=lead,
-        conversation=conversation,
-        sent_message_id=message_id,
-        direction=SentDMMessageDirection.OUTBOUND,
-        channel=send_channel or SentDMChannel.AUTO,
-        from_number=from_number,
-        to_number=lead.contact_number,
-        body=reply_text,
-        status=sentdm_status,
-        sandbox=getattr(settings, "SENTDM_SANDBOX_MODE", True),
-        raw_response=response,
-    )
+        channel=send_channel,
+            idempotency_prefix="ai-reply",
+            purpose=CreditPurpose.AI_REPLY,
+            lead=lead,
+            idempotency_key=f"ai-{conversation.id}-{lead.last_incoming_at.isoformat() if lead.last_incoming_at else int(time.time())}",
+        )
+    except InsufficientCredits:
+        return {"sent": False, "reason": "insufficient_credits"}
+    message_id = sentdm_message.sent_message_id or f"sentdm-ai-{conversation.id}-{int(time.time())}"
+    sentdm_status = sentdm_message.status
+    from_number = profile.whatsapp_phone_number if send_channel == SentDMChannel.WHATSAPP and profile.whatsapp_phone_number else profile.phone_number
+    sentdm_message.conversation = conversation
+    sentdm_message.from_number = from_number
+    sentdm_message.save(update_fields=["conversation", "from_number", "updated_at"])
     message_status = MessageStatus.QUEUED if sentdm_status == SentDMMessageStatus.QUEUED else MessageStatus.SENT
     Message.objects.get_or_create(
         provider_message_sid=message_id,
@@ -1619,6 +1735,8 @@ def apply_opt_out(lead, keyword):
 
 
 def process_sentdm_webhook_event(event):
+    if event.status == SentDMWebhookEventStatus.PROCESSED:
+        return {"processed": True, "action": "duplicate_ignored"}
     try:
         with transaction.atomic():
             details = extract_sentdm_webhook_message(event.payload)
@@ -1648,6 +1766,8 @@ def process_sentdm_webhook_event(event):
                 send_control_autoresponse(profile, lead, conversation, text, details.get("channel"), "help")
                 event.mark_processed()
                 return {"processed": True, "action": "help", "keyword": keyword, "lead_id": lead.id}
+
+            charge_inbound_message(event, profile, lead, details)
 
             try:
                 ai_result = send_ai_reply_for_inbound(profile, lead, conversation, details.get("channel"))
@@ -1724,8 +1844,14 @@ def create_webhook_event(request, *, allow_unverified_in_debug=False):
     except json.JSONDecodeError:
         payload = {"raw": request.body.decode("utf-8", errors="ignore")}
 
+    webhook_id = request.headers.get("x-webhook-id", "")
+    if webhook_id:
+        existing = SentDMWebhookEvent.objects.filter(event_id=webhook_id).first()
+        if existing:
+            return existing, True
+
     event = SentDMWebhookEvent.objects.create(
-        event_id=request.headers.get("x-webhook-id", ""),
+        event_id=webhook_id,
         event_type=request.headers.get("x-webhook-event-type", payload.get("type", "")),
         profile_id=payload.get("profile_id") or payload.get("profileId") or "",
         signature_verified=signature_verified,

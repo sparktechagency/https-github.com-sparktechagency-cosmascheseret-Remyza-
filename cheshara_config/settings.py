@@ -34,7 +34,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     
     # custom app-----
-    'accounts', 'ai', 'business', 'common', 'communications', 'core', 'crm', 'subscription', 'twilio_app', 'sentdm',
+    'accounts', 'ai', 'business', 'common', 'communications', 'core', 'crm', 'subscription', 'credits.apps.CreditsConfig', 'twilio_app', 'sentdm',
     'notifications.apps.NotificationsConfig', 'supports'
 ]
 
@@ -97,6 +97,8 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Auth - Shared', 'description': 'JWT refresh and verification endpoints.'},
         {'name': 'User Account', 'description': 'Current user profile and account management.'},
         {'name': 'User Plan Progress', 'description': 'Current user subscription and onboarding progress.'},
+        {'name': 'Billing - User', 'description': 'Store catalog, subscription entitlement, credit wallet, usage, and estimates.'},
+        {'name': 'Admin - Billing', 'description': 'Billing plans, store products, credit settings, and wallet administration.'},
         {'name': 'Business', 'description': 'Business management, automation and reply settings.'},
         {'name': 'Notifications', 'description': 'REST notifications for users and admin websocket-backed notifications.'},
         {'name': 'Sent.dm', 'description': 'Sent.dm sandbox, sender profile, message, and webhook endpoints.'},
@@ -301,6 +303,23 @@ REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED = os.getenv(
 ).strip().lower() in ("true", "1", "yes")
 SENTDM_WEBHOOK_SECRET = os.getenv("SENTDM_WEBHOOK_SECRET", "")
 SENTDM_WEBHOOK_TOLERANCE_SECONDS = int(os.getenv("SENTDM_WEBHOOK_TOLERANCE_SECONDS", "300"))
+BILLING_HMAC_SECRET = os.getenv("BILLING_HMAC_SECRET", SECRET_KEY)
+APPLE_IAP_BUNDLE_ID = os.getenv("APPLE_IAP_BUNDLE_ID", "com.chesera.app")
+APPLE_IAP_APP_ID = os.getenv("APPLE_IAP_APP_ID", "")
+APPLE_IAP_KEY_ID = os.getenv("APPLE_IAP_KEY_ID", "")
+APPLE_IAP_ISSUER_ID = os.getenv("APPLE_IAP_ISSUER_ID", "")
+APPLE_IAP_PRIVATE_KEY = os.getenv("APPLE_IAP_PRIVATE_KEY", "").replace("\\n", "\n")
+APPLE_IAP_PRIVATE_KEY_PATH = os.getenv("APPLE_IAP_PRIVATE_KEY_PATH", "")
+APPLE_ROOT_CA_PATHS = [
+    value.strip() for value in os.getenv("APPLE_ROOT_CA_PATHS", "").split(",") if value.strip()
+]
+GOOGLE_PLAY_PACKAGE_NAME = os.getenv("GOOGLE_PLAY_PACKAGE_NAME", "com.chesera.app")
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "")
+GOOGLE_PLAY_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_FILE", "")
+GOOGLE_PUBSUB_AUDIENCE = os.getenv("GOOGLE_PUBSUB_AUDIENCE", "")
+GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT = os.getenv("GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT", "")
+OPENAI_REPLY_MODEL = os.getenv("OPENAI_REPLY_MODEL", "gpt-4o-mini")
+OPENAI_SUMMARY_MODEL = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-4o")
 # Celery / background workers
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
@@ -314,6 +333,18 @@ CELERY_BEAT_SCHEDULE = {
     "send-due-automated-follow-ups-every-minute": {
         "task": "sentdm.tasks.send_due_automated_follow_ups_task",
         "schedule": crontab(),
+    },
+    "expire-credit-buckets-every-10-minutes": {
+        "task": "credits.tasks.expire_credit_buckets",
+        "schedule": crontab(minute="*/10"),
+    },
+    "release-stale-credit-reservations-every-10-minutes": {
+        "task": "credits.tasks.release_stale_reservations",
+        "schedule": crontab(minute="*/10"),
+    },
+    "resume-paused-followups-every-10-minutes": {
+        "task": "credits.tasks.resume_paused_followups",
+        "schedule": crontab(minute="*/10"),
     },
 }
 SENTDM_WEBHOOK_ASYNC_ENABLED = os.getenv("SENTDM_WEBHOOK_ASYNC_ENABLED", "True").strip().lower() in ("true", "1", "yes")

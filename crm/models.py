@@ -155,6 +155,8 @@ class AutomatedFollowUp(BaseModel):
     sentdm_message_id = models.CharField(max_length=120, blank=True, default="", db_index=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     failed_at = models.DateTimeField(null=True, blank=True)
+    paused_at = models.DateTimeField(null=True, blank=True)
+    pause_reason = models.CharField(max_length=40, blank=True, default="")
     error_message = models.TextField(blank=True, default="")
     metadata = models.JSONField(default=dict, blank=True)
 

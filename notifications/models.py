@@ -20,6 +20,14 @@ class NotificationType(models.TextChoices):
     FOLLOW_UP_SENT = "follow_up_sent", "Follow-up Sent"
     FOLLOW_UP_FAILED = "follow_up_failed", "Follow-up Failed"
     SYSTEM_ALERT = "system_alert", "System Alert"
+    CREDITS_LOW = "credits_low", "Credits Low"
+    CREDITS_EXHAUSTED = "credits_exhausted", "Credits Exhausted"
+    FOLLOWUPS_PAUSED = "followups_paused", "Follow-ups Paused"
+    PURCHASE_COMPLETED = "purchase_completed", "Purchase Completed"
+    SUBSCRIPTION_RENEWED = "subscription_renewed", "Subscription Renewed"
+    SUBSCRIPTION_BILLING_ISSUE = "subscription_billing_issue", "Subscription Billing Issue"
+    SUBSCRIPTION_EXPIRED = "subscription_expired", "Subscription Expired"
+    AI_REPLY_SKIPPED = "ai_reply_skipped", "AI Reply Skipped"
 
 
 class NotificationPriority(models.TextChoices):

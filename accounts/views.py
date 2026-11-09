@@ -61,6 +61,7 @@ from .serializers import (
 from common.choices import Status
 from django.db import transaction
 from notifications.services import NotificationTemplates, safe_notify
+from credits.services.trial import grant_starter_credits
 from .services import send_login_otp_email, send_password_reset_otp_email, send_registration_otp_sms
 
 
@@ -178,6 +179,8 @@ class ClientVerifyOTPAPIView(APIView):
         serializer = ClientVerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
+        if serializer.validated_data["login_mode"] == "registration":
+            grant_starter_credits(result["user"])
         return Response(
             {
                 "success": True,
@@ -851,9 +854,12 @@ class CurrentUserAPIView(APIView):
         }
 
         if active_subscription:
-            response["plan_type"] = active_subscription.plan_type,
-            response["expires_at"] = active_subscription.expiry_date,
+            response["plan_type"] = active_subscription.plan_type
+            response["expires_at"] = active_subscription.current_period_end or active_subscription.expiry_date
             response["active_subscription"] = UserSubscriptionSerializer(active_subscription).data
+
+        from credits.views import wallet_data
+        response["billing"] = wallet_data(user)
 
         if active_subscription and active_subscription.is_free_trial:
             user_free_trial_number = UserFreeTrailNumber.objects.filter(user=user).first()
@@ -1082,7 +1088,7 @@ class CurrentUserPlanAndProgressAPIView(APIView):
         subscription = self.get_active_subscription(user)
         self.response["has_active_subscription"] = subscription is not None
         self.response["plan_type"] = subscription.plan_type if subscription else None
-        self.response["expires_at"] = subscription.expiry_date if subscription else None
+        self.response["expires_at"] = (subscription.current_period_end or subscription.expiry_date) if subscription else None
         self.response["active_subscription"] = UserSubscriptionSerializer(subscription).data if subscription else None
         self.add_progress(
             "Subscription Active",
@@ -1328,6 +1334,8 @@ class CurrentUserPlanAndProgressAPIView(APIView):
         self.process_sentdm_campaign()
         self.process_sentdm_number()
         self.process_activation_status(subscription)
+        from credits.views import wallet_data
+        self.response["billing"] = wallet_data(user)
         self.finalize_progress()
 
         return Response({

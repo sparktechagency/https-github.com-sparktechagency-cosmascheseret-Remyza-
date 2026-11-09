@@ -198,6 +198,13 @@ class SentDMWebhookEvent(BaseModel):
             models.Index(fields=["event_id"]),
             models.Index(fields=["profile_id"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event_id"],
+                condition=~models.Q(event_id=""),
+                name="unique_nonblank_sentdm_webhook_event_id",
+            )
+        ]
 
     def mark_processed(self):
         self.status = SentDMWebhookEventStatus.PROCESSED

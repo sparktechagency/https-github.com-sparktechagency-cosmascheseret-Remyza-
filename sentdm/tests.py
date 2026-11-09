@@ -605,6 +605,7 @@ class SentDMProfileCreateGuardTests(TestCase):
             transaction_id="txn-profile-guard",
             is_subscription_active=True,
             expiry_date=timezone.now() + timedelta(days=30),
+            verified_at=timezone.now(),
         )
 
     @patch("sentdm.services.SentDMClient")
@@ -725,6 +726,7 @@ class SentDMWhatsAppConnectionStateTests(TestCase):
             transaction_id="txn-whatsapp-connect",
             is_subscription_active=True,
             expiry_date=timezone.now() + timedelta(days=30),
+            verified_at=timezone.now(),
         )
 
     def test_inherited_whatsapp_response_does_not_activate_agent_whatsapp(self):
@@ -977,6 +979,7 @@ class SentDMProfileSyncTests(TestCase):
             transaction_id="txn-sync-profile",
             is_subscription_active=True,
             expiry_date=timezone.now() + timedelta(days=30),
+            verified_at=timezone.now(),
         )
 
     @patch("sentdm.services.SentDMClient")

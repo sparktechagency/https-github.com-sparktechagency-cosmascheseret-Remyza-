@@ -112,6 +112,42 @@ class NotificationTemplates:
     """Chesera notification templates used by API views, services, and Celery tasks."""
 
     @staticmethod
+    def credits_low(user, balance, threshold):
+        return NotificationService.create_notification(
+            user=user,
+            notification_type=NotificationType.CREDITS_LOW,
+            title="Credits running low",
+            body=f"You have {balance} credits remaining. Your low-balance threshold is {threshold}.",
+            data={"balance": balance, "threshold": threshold},
+            priority=NotificationPriority.HIGH,
+            push_websocket=False,
+        )
+
+    @staticmethod
+    def credits_exhausted(user):
+        return NotificationService.create_notification(
+            user=user,
+            notification_type=NotificationType.CREDITS_EXHAUSTED,
+            title="Credits exhausted",
+            body="Sending and automated follow-ups are paused. Incoming messages will still arrive.",
+            data={"balance": 0},
+            priority=NotificationPriority.URGENT,
+            push_websocket=False,
+        )
+
+    @staticmethod
+    def followups_paused(user, lead, followup):
+        return NotificationService.create_notification(
+            user=user,
+            notification_type=NotificationType.FOLLOWUPS_PAUSED,
+            title="Follow-up paused",
+            body=f"A follow-up for {lead.contact_number} is waiting for more credits.",
+            data={"lead_id": str(lead.id), "followup_id": str(followup.id)},
+            priority=NotificationPriority.HIGH,
+            push_websocket=False,
+        )
+
+    @staticmethod
     def welcome_user(user):
         return NotificationService.create_notification(
             user=user,

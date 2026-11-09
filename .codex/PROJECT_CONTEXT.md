@@ -1,5 +1,20 @@
 # CHESERA PROJECT CONTEXT
 
+## BILLING, IAP, AND CREDIT DIRECTION (2026-11-09)
+
+- Launch plan: Chesera Pro, store price $99/month, 1,000 monthly credits, one dedicated number, all launch features enabled.
+- Apple App Store and Google Play own customer-facing prices. Django stores reference prices for analytics only.
+- Every verified subscription snapshots its paid price, currency, monthly-credit allowance, number limit, and features. Later plan edits never rewrite an existing subscriber's locked terms.
+- The legacy client-written subscription POST is closed with HTTP 410. Pro entitlement must come from server-verified Apple/Google purchase data.
+- Starter access is 50 backend-granted credits, not an App Store/Play Store free trial. Starter users receive no dedicated number.
+- Credit charging defaults: outbound SMS/RCS 1 per carrier segment, inbound SMS 1, MMS 3, WhatsApp 1 per 24-hour conversation, email 0.
+- Monthly allowance rolls over for one configurable month. Purchased top-ups never expire and are spent after monthly/starter/admin buckets.
+- At zero credits, outbound messages and follow-ups pause; inbound remains stored and any uncollectable inbound charge is recorded as waived.
+- Credit enforcement launches in `shadow` mode and is switched to `enforce` only after production metering has been observed.
+- Store products: `chesera_pro_monthly`, `credits_250`, `credits_1000`, `credits_5000`, and inactive-at-launch `pro_setup_fee`.
+- Auto-top-up cannot silently buy a consumable through Apple/Google. V1 can remember the preference and prompt the user to approve a pack purchase; true unattended charging requires a future store-compliant design.
+- AI lead replies use `gpt-4o-mini`, the latest 10 conversation messages, and a hard 160-character output cap. Internal summaries may use the larger `OPENAI_SUMMARY_MODEL`.
+
 ## CURRENT PRODUCT DIRECTION
 
 Chesera is moving away from the active Twilio-first workflow for new messaging development.
