@@ -302,6 +302,21 @@ REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED = os.getenv(
     "REGISTRATION_OTP_ADMIN_FALLBACK_ENABLED", "False"
 ).strip().lower() in ("true", "1", "yes")
 SENTDM_WEBHOOK_SECRET = os.getenv("SENTDM_WEBHOOK_SECRET", "")
+# Each Sent webhook endpoint has its own signing secret. Keep the legacy
+# setting as a fallback during the v1-to-v2 rollout so an existing deployment
+# continues to verify requests until the endpoint-specific secrets are set.
+SENTDM_INBOUND_WEBHOOK_SECRET = os.getenv(
+    "SENTDM_INBOUND_WEBHOOK_SECRET", ""
+)
+SENTDM_INBOUND_WEBHOOK_LEGACY_SECRET = os.getenv(
+    "SENTDM_INBOUND_WEBHOOK_LEGACY_SECRET", SENTDM_WEBHOOK_SECRET
+)
+SENTDM_PROFILE_WEBHOOK_SECRET = os.getenv(
+    "SENTDM_PROFILE_WEBHOOK_SECRET", ""
+)
+SENTDM_PROFILE_WEBHOOK_LEGACY_SECRET = os.getenv(
+    "SENTDM_PROFILE_WEBHOOK_LEGACY_SECRET", SENTDM_WEBHOOK_SECRET
+)
 SENTDM_WEBHOOK_TOLERANCE_SECONDS = int(os.getenv("SENTDM_WEBHOOK_TOLERANCE_SECONDS", "300"))
 BILLING_HMAC_SECRET = os.getenv("BILLING_HMAC_SECRET", SECRET_KEY)
 APPLE_IAP_BUNDLE_ID = os.getenv("APPLE_IAP_BUNDLE_ID", "com.chesera.app")

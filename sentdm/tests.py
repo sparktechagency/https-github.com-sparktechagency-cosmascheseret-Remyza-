@@ -512,6 +512,54 @@ class SentDMWebhookSignatureTests(SimpleTestCase):
         self.assertTrue(verify_webhook_signature(request))
 
     @override_settings(SENTDM_WEBHOOK_SECRET="whsec_c2VjcmV0", SENTDM_WEBHOOK_TOLERANCE_SECONDS=300)
+    def test_verify_webhook_signature_accepts_v2_headers_and_rotated_signatures(self):
+        body = b'{"field":"message","event":"message.received","payload":{}}'
+        timestamp = str(int(time.time()))
+        delivery_id = "evt_v2_123"
+        digest = hmac.new(
+            b"secret",
+            delivery_id.encode() + b"." + timestamp.encode() + b"." + body,
+            hashlib.sha256,
+        ).digest()
+        valid_signature = f"v1,{base64.b64encode(digest).decode()}"
+        request = self.factory.post(
+            "/api/v1/sentdm/webhooks/inbound/",
+            body,
+            content_type="application/json",
+            HTTP_WEBHOOK_ID=delivery_id,
+            HTTP_WEBHOOK_SIGNATURE=f"v1,invalid {valid_signature}",
+            HTTP_WEBHOOK_TIMESTAMP=timestamp,
+        )
+
+        self.assertTrue(verify_webhook_signature(request))
+
+    @override_settings(SENTDM_WEBHOOK_TOLERANCE_SECONDS=300)
+    def test_verify_webhook_signature_accepts_legacy_secret_during_v2_cutover(self):
+        body = b'{"field":"message","event":"message.received","payload":{}}'
+        timestamp = str(int(time.time()))
+        delivery_id = "evt_v2_legacy_secret"
+        digest = hmac.new(
+            b"legacy-secret",
+            delivery_id.encode() + b"." + timestamp.encode() + b"." + body,
+            hashlib.sha256,
+        ).digest()
+        request = self.factory.post(
+            "/api/v1/sentdm/webhooks/inbound/",
+            body,
+            content_type="application/json",
+            HTTP_WEBHOOK_ID=delivery_id,
+            HTTP_WEBHOOK_SIGNATURE=f"v1,{base64.b64encode(digest).decode()}",
+            HTTP_WEBHOOK_TIMESTAMP=timestamp,
+        )
+
+        self.assertTrue(
+            verify_webhook_signature(
+                request,
+                secrets=("whsec_bmV3LXNlY3JldA==", "legacy-secret"),
+            )
+        )
+
+    @override_settings(SENTDM_WEBHOOK_SECRET="whsec_c2VjcmV0", SENTDM_WEBHOOK_TOLERANCE_SECONDS=300)
     def test_verify_webhook_signature_rejects_invalid_signature(self):
         request = self.factory.post(
             "/api/v1/sentdm/webhooks/inbound/",
@@ -1040,6 +1088,33 @@ class SentDMProfileSyncTests(TestCase):
             ).exists()
         )
 
+    @override_settings(DEBUG=True, SENTDM_PROFILE_WEBHOOK_SECRET="")
+    def test_profile_ready_webhook_accepts_v2_channel_event_envelope(self):
+        request = self.factory.post(
+            "/api/v1/sentdm/webhooks/profile-ready/",
+            {
+                "field": "channel",
+                "event": "channel.activated",
+                "payload": {
+                    "account_id": self.profile.profile_id,
+                    "status": "ACTIVE",
+                    "sender_value": "+15559990003",
+                },
+            },
+            format="json",
+            HTTP_WEBHOOK_ID="profile-event-v2",
+        )
+
+        response = SentDMProfileReadyWebhookAPIView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.status, "approved")
+        self.assertEqual(self.profile.phone_number, "+15559990003")
+        event = SentDMWebhookEvent.objects.get(event_id="profile-event-v2")
+        self.assertEqual(event.event_type, "channel.activated")
+        self.assertEqual(event.profile_id, self.profile.profile_id)
+
 
 class SentDMWebhookProcessingTests(TestCase):
     def setUp(self):
@@ -1357,6 +1432,7 @@ class SentDMWebhookAsyncQueueTests(TestCase):
             b'{"type":"message.received","payload":{"profile_id":"profile_test","text":"hello"}}',
             content_type="application/json",
             HTTP_X_WEBHOOK_ID="webhook-endpoint-id",
+            HTTP_X_WEBHOOK_EVENT_ID="webhook-event-id",
             HTTP_X_WEBHOOK_EVENT_TYPE="message.received",
         )
 
@@ -1365,8 +1441,53 @@ class SentDMWebhookAsyncQueueTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["processing"]["queued"])
         event = SentDMWebhookEvent.objects.get()
+        self.assertEqual(event.event_id, "webhook-event-id")
         self.assertEqual(event.status, "received")
         mocked_enqueue.assert_called_once_with(event)
+
+    @override_settings(DEBUG=True, SENTDM_INBOUND_WEBHOOK_SECRET="")
+    @patch("sentdm.views.enqueue_sentdm_webhook_event")
+    def test_v1_events_from_same_webhook_use_event_id_for_deduplication(self, mocked_enqueue):
+        mocked_enqueue.return_value = {"queued": True, "task_id": "task-123", "processed_inline": False}
+
+        for event_id in ("event-one", "event-two"):
+            request = self.factory.post(
+                "/api/v1/sentdm/webhooks/inbound/",
+                b'{"type":"message.received","payload":{"profile_id":"profile_test","text":"hello"}}',
+                content_type="application/json",
+                HTTP_X_WEBHOOK_ID="same-webhook-configuration-id",
+                HTTP_X_WEBHOOK_EVENT_ID=event_id,
+                HTTP_X_WEBHOOK_EVENT_TYPE="message.received",
+            )
+            response = SentDMInboundWebhookAPIView.as_view()(request)
+            self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            set(SentDMWebhookEvent.objects.values_list("event_id", flat=True)),
+            {"event-one", "event-two"},
+        )
+
+    @override_settings(DEBUG=True, SENTDM_INBOUND_WEBHOOK_SECRET="")
+    @patch("sentdm.views.enqueue_sentdm_webhook_event")
+    def test_replayed_v2_delivery_is_not_enqueued_twice(self, mocked_enqueue):
+        mocked_enqueue.return_value = {"queued": True, "task_id": "task-123", "processed_inline": False}
+        body = b'{"field":"message","event":"message.received","payload":{"account_id":"profile_test","message_id":"message-1","text":"hello"}}'
+
+        responses = []
+        for _ in range(2):
+            request = self.factory.post(
+                "/api/v1/sentdm/webhooks/inbound/",
+                body,
+                content_type="application/json",
+                HTTP_WEBHOOK_ID="same-v2-delivery-id",
+            )
+            responses.append(SentDMInboundWebhookAPIView.as_view()(request))
+
+        self.assertEqual(responses[0].status_code, 200)
+        self.assertEqual(responses[1].status_code, 200)
+        self.assertTrue(responses[1].data["processing"]["duplicate"])
+        self.assertEqual(SentDMWebhookEvent.objects.count(), 1)
+        mocked_enqueue.assert_called_once()
 
     def test_process_task_skips_already_processed_event(self):
         event = SentDMWebhookEvent.objects.create(

@@ -80,6 +80,8 @@ def extract_sender_profile_phone_number(profile_payload):
             "phoneNumber",
             "sender_phone_number",
             "senderPhoneNumber",
+            "sender_value",
+            "senderValue",
             "number",
         },
     )
@@ -1273,7 +1275,19 @@ def _first_scalar_value(payload, keys):
 
 
 def extract_sentdm_webhook_message(payload):
-    profile_id = _first_scalar_value(payload, ("profile_id", "profileId", "sender_profile_id", "senderProfileId"))
+    profile_id = _first_scalar_value(
+        payload,
+        (
+            "profile_id",
+            "profileId",
+            "sender_profile_id",
+            "senderProfileId",
+            # Sent v2/v3 event envelopes identify the account the event is
+            # about here. For inherited events this is the Sender Profile ID.
+            "account_id",
+            "accountId",
+        ),
+    )
     message_id = _first_scalar_value(payload, ("message_id", "messageId", "id", "sid"))
     event_type = _first_scalar_value(payload, ("sub_type", "subType", "type", "event_type", "eventType", "event"))
     direction = _first_scalar_value(payload, ("direction",)).lower()
@@ -1802,14 +1816,43 @@ def enqueue_sentdm_webhook_event(event):
         event.save(update_fields=["status", "error_message", "updated_at"])
         return {"queued": False, "processed_inline": False, "error": str(exc)}
 
-def verify_webhook_signature(request):
-    secret = getattr(settings, "SENTDM_WEBHOOK_SECRET", "")
-    if not secret:
+def get_sentdm_webhook_headers(request):
+    """Return signature and delivery identifiers for Sent webhook v1 or v2."""
+    v2_webhook_id = request.headers.get("webhook-id", "")
+    v1_webhook_id = request.headers.get("x-webhook-id", "")
+
+    return {
+        # The signature input is the v2 delivery ID or the v1 webhook
+        # configuration ID, depending on the protocol version.
+        "signature_id": v2_webhook_id or v1_webhook_id,
+        # The deduplication ID is per delivery/event. X-Webhook-ID must never
+        # be used here because v1 reuses it for every event from an endpoint.
+        "delivery_id": v2_webhook_id or request.headers.get("x-webhook-event-id", ""),
+        "timestamp": (
+            request.headers.get("webhook-timestamp", "")
+            or request.headers.get("x-webhook-timestamp", "")
+        ),
+        "signature": (
+            request.headers.get("webhook-signature", "")
+            or request.headers.get("x-webhook-signature", "")
+        ),
+    }
+
+
+def verify_webhook_signature(request, *, secret=None, secrets=None):
+    if secrets is None:
+        secrets = [secret if secret is not None else getattr(settings, "SENTDM_WEBHOOK_SECRET", "")]
+    elif isinstance(secrets, str):
+        secrets = [secrets]
+
+    candidate_secrets = list(dict.fromkeys(value for value in secrets if value))
+    if not candidate_secrets:
         return False
 
-    signature = request.headers.get("x-webhook-signature", "")
-    webhook_id = request.headers.get("x-webhook-id", "")
-    timestamp = request.headers.get("x-webhook-timestamp", "")
+    webhook_headers = get_sentdm_webhook_headers(request)
+    signature = webhook_headers["signature"]
+    webhook_id = webhook_headers["signature_id"]
+    timestamp = webhook_headers["timestamp"]
 
     if not signature or not webhook_id or not timestamp:
         return False
@@ -1822,43 +1865,71 @@ def verify_webhook_signature(request):
     if age > getattr(settings, "SENTDM_WEBHOOK_TOLERANCE_SECONDS", 300):
         return False
 
-    secret_value = secret.removeprefix("whsec_")
-    try:
-        secret_key = base64.b64decode(secret_value, validate=True)
-    except (binascii.Error, ValueError):
-        secret_key = secret.encode()
-
     signed_content = webhook_id.encode() + b"." + timestamp.encode() + b"." + request.body
-    digest = hmac.new(secret_key, signed_content, hashlib.sha256).digest()
-    expected = f"v1,{base64.b64encode(digest).decode()}"
-    return hmac.compare_digest(signature, expected)
+    # Standard Webhooks may include multiple space-separated signatures for a
+    # short period after secret rotation. Accept the request when any one of
+    # them matches either the endpoint's v2 secret or the legacy v1 secret
+    # retained during the cutover.
+    provided_signatures = signature.split()
+    for candidate_secret in candidate_secrets:
+        secret_value = candidate_secret.removeprefix("whsec_")
+        try:
+            secret_key = base64.b64decode(secret_value, validate=True)
+        except (binascii.Error, ValueError):
+            secret_key = candidate_secret.encode()
+
+        digest = hmac.new(secret_key, signed_content, hashlib.sha256).digest()
+        expected = f"v1,{base64.b64encode(digest).decode()}"
+        if any(
+            hmac.compare_digest(candidate, expected)
+            for candidate in provided_signatures
+        ):
+            return True
+    return False
 
 
-def create_webhook_event(request, *, allow_unverified_in_debug=False):
-    signature_verified = verify_webhook_signature(request)
+def create_webhook_event(request, *, allow_unverified_in_debug=False, secret=None, secrets=None):
+    signature_verified = verify_webhook_signature(request, secret=secret, secrets=secrets)
     if not signature_verified and not (allow_unverified_in_debug and settings.DEBUG):
-        return None, False
+        return None, False, False
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
         payload = {"raw": request.body.decode("utf-8", errors="ignore")}
 
-    webhook_id = request.headers.get("x-webhook-id", "")
-    if webhook_id:
-        existing = SentDMWebhookEvent.objects.filter(event_id=webhook_id).first()
+    webhook_headers = get_sentdm_webhook_headers(request)
+    delivery_id = webhook_headers["delivery_id"]
+    if delivery_id:
+        existing = SentDMWebhookEvent.objects.filter(event_id=delivery_id).first()
         if existing:
-            return existing, True
+            return existing, True, False
 
     event = SentDMWebhookEvent.objects.create(
-        event_id=webhook_id,
-        event_type=request.headers.get("x-webhook-event-type", payload.get("type", "")),
-        profile_id=payload.get("profile_id") or payload.get("profileId") or "",
+        event_id=delivery_id,
+        event_type=(
+            request.headers.get("x-webhook-event-type", "")
+            or payload.get("event")
+            or payload.get("type")
+            or payload.get("field")
+            or ""
+        ),
+        profile_id=_first_scalar_value(
+            payload,
+            (
+                "profile_id",
+                "profileId",
+                "sender_profile_id",
+                "senderProfileId",
+                "account_id",
+                "accountId",
+            ),
+        ),
         signature_verified=signature_verified,
         payload=payload,
         headers={key: value for key, value in request.headers.items()},
     )
-    return event, True
+    return event, True, True
 
 
 def get_active_welcome_template(user, organization):

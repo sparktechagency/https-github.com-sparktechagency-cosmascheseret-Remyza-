@@ -826,9 +826,28 @@ class SentDMInboundWebhookAPIView(APIView):
         },
     )
     def post(self, request):
-        event, accepted = create_webhook_event(request, allow_unverified_in_debug=True)
+        event, accepted, created = create_webhook_event(
+            request,
+            allow_unverified_in_debug=True,
+            secrets=(
+                settings.SENTDM_INBOUND_WEBHOOK_SECRET,
+                settings.SENTDM_INBOUND_WEBHOOK_LEGACY_SECRET,
+                settings.SENTDM_WEBHOOK_SECRET,
+            ),
+        )
         if not accepted:
             return Response({"success": False, "message": "Invalid webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not created:
+            return Response(
+                {
+                    "success": True,
+                    "message": "Duplicate Sent.dm webhook delivery ignored.",
+                    "processing": {"queued": False, "duplicate": True},
+                    "data": SentDMWebhookEventSerializer(event).data,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         queue_result = enqueue_sentdm_webhook_event(event)
         event.refresh_from_db()
@@ -859,13 +878,37 @@ class SentDMProfileReadyWebhookAPIView(APIView):
         },
     )
     def post(self, request):
-        event, accepted = create_webhook_event(request, allow_unverified_in_debug=True)
+        event, accepted, created = create_webhook_event(
+            request,
+            allow_unverified_in_debug=True,
+            secrets=(
+                settings.SENTDM_PROFILE_WEBHOOK_SECRET,
+                settings.SENTDM_PROFILE_WEBHOOK_LEGACY_SECRET,
+                settings.SENTDM_WEBHOOK_SECRET,
+            ),
+        )
         if not accepted:
             return Response({"success": False, "message": "Invalid webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if not created:
+            return Response(
+                {
+                    "success": True,
+                    "message": "Duplicate Sent.dm webhook delivery ignored.",
+                    "data": SentDMWebhookEventSerializer(event).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         payload = event.payload
-        profile_id = payload.get("profileId") or payload.get("profile_id")
-        status_value = payload.get("status")
+        event_payload = payload.get("payload") if isinstance(payload.get("payload"), dict) else payload
+        profile_id = (
+            event_payload.get("account_id")
+            or event_payload.get("accountId")
+            or event_payload.get("profileId")
+            or event_payload.get("profile_id")
+        )
+        status_value = event_payload.get("status")
         if profile_id:
             profile = SentDMProfile.objects.filter(profile_id=profile_id).first()
             if profile:
@@ -874,7 +917,7 @@ class SentDMProfileReadyWebhookAPIView(APIView):
                 if status_value:
                     profile.status = normalize_profile_status(status_value)
                     update_fields.append("status")
-                phone_number = extract_sender_profile_phone_number(payload)
+                phone_number = extract_sender_profile_phone_number(event_payload)
                 if phone_number and str(phone_number).startswith("+"):
                     profile.phone_number = str(phone_number)
                     update_fields.append("phone_number")
